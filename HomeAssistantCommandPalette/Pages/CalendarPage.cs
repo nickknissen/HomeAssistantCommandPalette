@@ -32,7 +32,9 @@ internal sealed partial class CalendarPage : ListPage
         Title = "Calendar";
         Name = "Open";
         Id = "ha.calendar";
-        ShowDetails = true;
+        // Off by default — users can toggle the details pane on; the
+        // single-line title already carries the time range and summary.
+        ShowDetails = false;
         PlaceholderText = "Search upcoming events";
     }
 
@@ -100,6 +102,8 @@ internal sealed partial class CalendarPage : ListPage
         if (!string.IsNullOrEmpty(ev.Location)) details.Add(Row("Location", ev.Location));
         if (!string.IsNullOrEmpty(ev.Description)) details.Add(Row("Description", ev.Description));
 
+        var (bg, fg) = ColorForCalendar(ev.CalendarEntityId);
+
         return new ListItem(new CopyTextCommand(ev.Summary) { Name = "Copy event title" })
         {
             // Raycast-style "<from> - <to> | <title>" so the time range is
@@ -107,10 +111,47 @@ internal sealed partial class CalendarPage : ListPage
             // (we don't have List sections to group by day yet).
             Title = $"{FormatTimeRange(ev)} | {ev.Summary}",
             Subtitle = FormatDayLabel(ev.Start),
-            Icon = Icons.App,
-            Tags = [new Tag(ev.CalendarName) { ToolTip = "Calendar" }],
+            Icon = Icons.InputDate,
+            Tags = [new Tag(ev.CalendarName) { ToolTip = "Calendar", Background = bg, Foreground = fg }],
             Details = new Details { Title = ev.Summary, Metadata = details.ToArray() },
         };
+    }
+
+    // Stable palette of background colours used for the calendar tag.
+    // Chosen to be visually distinct on dark + light themes with white
+    // text. Order doesn't matter — each calendar entity_id is hashed into
+    // a slot, so the same calendar always gets the same colour even if
+    // calendars are added or reordered.
+    private static readonly OptionalColor[] CalendarColors =
+    [
+        ColorHelpers.FromArgb(255,  76, 161, 222), // blue
+        ColorHelpers.FromArgb(255,  76, 175,  80), // green
+        ColorHelpers.FromArgb(255, 244,  67,  54), // red
+        ColorHelpers.FromArgb(255, 255, 152,   0), // orange
+        ColorHelpers.FromArgb(255, 156,  39, 176), // purple
+        ColorHelpers.FromArgb(255,   0, 150, 136), // teal
+        ColorHelpers.FromArgb(255, 233,  30,  99), // pink
+        ColorHelpers.FromArgb(255,  63,  81, 181), // indigo
+        ColorHelpers.FromArgb(255, 121,  85,  72), // brown
+    ];
+
+    private static readonly OptionalColor CalendarTagForeground = ColorHelpers.FromRgb(255, 255, 255);
+
+    private static (OptionalColor Background, OptionalColor Foreground) ColorForCalendar(string entityId)
+    {
+        // FNV-1a 32-bit — small, deterministic, no allocation, doesn't
+        // depend on the runtime's randomized string-hash seed (which would
+        // re-shuffle colours on every CmdPal restart).
+        const uint offset = 2166136261;
+        const uint prime = 16777619;
+        uint h = offset;
+        foreach (var c in entityId)
+        {
+            h ^= c;
+            h *= prime;
+        }
+        var idx = (int)(h % (uint)CalendarColors.Length);
+        return (CalendarColors[idx], CalendarTagForeground);
     }
 
     /// <summary>
