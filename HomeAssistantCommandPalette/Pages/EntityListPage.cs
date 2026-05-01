@@ -624,6 +624,18 @@ internal sealed partial class EntityListPage : ListPage
             var v = tt switch { double d => $"{d}°", long l => $"{l}°", _ => null };
             if (v is not null) meta.Add(Row("Target temp", v));
         }
+        // Dual setpoint (heat_cool / auto): the integration reports
+        // target_temp_low / target_temp_high instead of `temperature`.
+        if (entity.Attributes.TryGetValue("target_temp_low", out var tlo))
+        {
+            var v = tlo switch { double d => $"{d}°", long l => $"{l}°", _ => null };
+            if (v is not null) meta.Add(Row("Target low", v));
+        }
+        if (entity.Attributes.TryGetValue("target_temp_high", out var thi))
+        {
+            var v = thi switch { double d => $"{d}°", long l => $"{l}°", _ => null };
+            if (v is not null) meta.Add(Row("Target high", v));
+        }
         // Min / max range — only if both are reported.
         var min = entity.Attributes.TryGetValue("min_temp", out var mn) ? mn : null;
         var max = entity.Attributes.TryGetValue("max_temp", out var mx) ? mx : null;
