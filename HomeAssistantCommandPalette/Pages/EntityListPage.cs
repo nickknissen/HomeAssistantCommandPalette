@@ -615,6 +615,18 @@ internal sealed partial class EntityListPage : ListPage
         {
             meta.Add(Row("Source", src));
         }
+        if (entity.Attributes.TryGetValue("sound_mode", out var sm) && sm is string sms && !string.IsNullOrEmpty(sms))
+        {
+            meta.Add(Row("Sound mode", sms));
+        }
+        if (entity.Attributes.TryGetValue("shuffle", out var shuf) && shuf is bool sb)
+        {
+            meta.Add(Row("Shuffle", sb ? "on" : "off"));
+        }
+        if (entity.Attributes.TryGetValue("repeat", out var rep) && rep is string reps && !string.IsNullOrEmpty(reps))
+        {
+            meta.Add(Row("Repeat", reps));
+        }
         // volume_level is 0.0..1.0
         if (entity.Attributes.TryGetValue("volume_level", out var vol) && vol is double v)
         {
@@ -1141,9 +1153,17 @@ internal sealed partial class EntityListPage : ListPage
                         onSuccess: OnServiceCallSucceeded)));
             }
 
+            // supported_features bits on media_player. Values from HA's
+            // media_player component:
+            //   1 PAUSE, 2 SEEK, 4 VOLUME_SET, 8 VOLUME_MUTE, 16 PREVIOUS_TRACK,
+            //   32 NEXT_TRACK, 128 TURN_ON, 256 TURN_OFF, 512 PLAY_MEDIA,
+            //   1024 VOLUME_STEP, 2048 SELECT_SOURCE, 4096 STOP, 16384 PLAY,
+            //   32768 SHUFFLE_SET, 65536 SELECT_SOUND_MODE, 262144 REPEAT_SET.
+            var mpsf = entity.Attributes.TryGetValue("supported_features", out var sfo2) && sfo2 is long mpb ? mpb : -1;
+            bool MpHas(long bit) => mpsf < 0 || (mpsf & bit) == bit;
+
             // Volume presets — only when the entity supports volume_set.
-            // supported_features bit 4 (value 4) = VOLUME_SET on media_player.
-            if (entity.Attributes.TryGetValue("supported_features", out var sf) && sf is long bits && (bits & 4) == 4)
+            if (MpHas(4))
             {
                 var presets = new IContextItem[]
                 {
@@ -1158,6 +1178,82 @@ internal sealed partial class EntityListPage : ListPage
                     Icon = Icons.Volume,
                     MoreCommands = presets,
                 });
+            }
+
+            // Shuffle toggle — flip the current `shuffle` bool. Skip when the
+            // attribute is missing (some players publish only when supported).
+            if (MpHas(32768) && entity.Attributes.TryGetValue("shuffle", out var sh) && sh is bool isShuffling)
+            {
+                items.Add(new CommandContextItem(
+                    new CallServiceCommand(
+                        _client,
+                        domain: "media_player",
+                        service: "shuffle_set",
+                        entityId: entity.EntityId,
+                        displayName: isShuffling ? $"Disable shuffle on {entity.FriendlyName}" : $"Enable shuffle on {entity.FriendlyName}",
+                        icon: Icons.PlayPause,
+                        extraData: new Dictionary<string, object?> { ["shuffle"] = !isShuffling },
+                        onSuccess: OnServiceCallSucceeded)));
+            }
+
+            // Repeat submenu — fixed set of options the HA service accepts.
+            if (MpHas(262144))
+            {
+                var repeatOptions = new[] { "off", "one", "all" };
+                var repeatItems = repeatOptions
+                    .Select(r => (IContextItem)new CommandContextItem(new CallServiceCommand(
+                        _client, "media_player", "repeat_set", entity.EntityId,
+                        r, extraData: new Dictionary<string, object?> { ["repeat"] = r },
+                        onSuccess: OnServiceCallSucceeded)))
+                    .ToArray();
+                items.Add(new CommandContextItem(new NoOpCommand())
+                {
+                    Title = "Set repeat…",
+                    Icon = Icons.PlayPause,
+                    MoreCommands = repeatItems,
+                });
+            }
+
+            // Source submenu — populated from the entity's `source_list`.
+            if (MpHas(2048) && entity.Attributes.TryGetValue("source_list", out var sl) && sl is List<object?> sources)
+            {
+                var sourceItems = sources
+                    .OfType<string>()
+                    .Select(s => (IContextItem)new CommandContextItem(new CallServiceCommand(
+                        _client, "media_player", "select_source", entity.EntityId,
+                        s, extraData: new Dictionary<string, object?> { ["source"] = s },
+                        onSuccess: OnServiceCallSucceeded)))
+                    .ToArray();
+                if (sourceItems.Length > 0)
+                {
+                    items.Add(new CommandContextItem(new NoOpCommand())
+                    {
+                        Title = "Select source…",
+                        Icon = Icons.Volume,
+                        MoreCommands = sourceItems,
+                    });
+                }
+            }
+
+            // Sound mode submenu — same shape, gated on SELECT_SOUND_MODE.
+            if (MpHas(65536) && entity.Attributes.TryGetValue("sound_mode_list", out var sml) && sml is List<object?> soundModes)
+            {
+                var soundItems = soundModes
+                    .OfType<string>()
+                    .Select(s => (IContextItem)new CommandContextItem(new CallServiceCommand(
+                        _client, "media_player", "select_sound_mode", entity.EntityId,
+                        s, extraData: new Dictionary<string, object?> { ["sound_mode"] = s },
+                        onSuccess: OnServiceCallSucceeded)))
+                    .ToArray();
+                if (soundItems.Length > 0)
+                {
+                    items.Add(new CommandContextItem(new NoOpCommand())
+                    {
+                        Title = "Select sound mode…",
+                        Icon = Icons.Volume,
+                        MoreCommands = soundItems,
+                    });
+                }
             }
         }
 
