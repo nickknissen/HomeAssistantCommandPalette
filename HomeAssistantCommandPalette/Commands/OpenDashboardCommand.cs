@@ -34,7 +34,7 @@ internal sealed partial class OpenDashboardCommand : InvokableCommand
         try
         {
             var url = _entityId is null
-                ? _settings.Url
+                ? _settings.Url + _settings.DashboardPath
                 : $"{_settings.Url}/_my_redirect/more_info?entity_id={Uri.EscapeDataString(_entityId)}";
             Process.Start(new ProcessStartInfo
             {
