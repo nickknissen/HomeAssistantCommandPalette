@@ -10,57 +10,52 @@ ships ~40 commands. We're recreating the high-value ones for CmdPal.
 
 ---
 
-## Phase 1 — Minimum viable ✅ (scaffolded)
+## Phase 1 — Minimum viable ✅ (shipped locally)
 
-Goal: prove the bones — settings, REST, list, toggle, dashboard.
+Goal: prove the bones — settings, REST, list, toggle, dashboard, plus the
+Raycast-style per-domain top-level commands.
 
 - [x] `JsonSettingsManager`-backed settings: HA URL + Long-Lived Access Token + ignore-cert toggle
-- [x] Single top-level `Home Assistant` command (alias `ha` via Subtitle)
-- [x] `HomeAssistantPage` listing all entities from `GET /api/states`
+- [x] Top-level command per domain (All Entities, Lights, Switches, Covers,
+      Fans, Media Players, Scenes, Scripts, Automations, Sensors, Binary
+      Sensors, Climate, Buttons, Persons, Zones, Cameras, Vacuums, Helpers,
+      Updates, Weather) plus a no-view **Open Dashboard**
+- [x] Single `EntityListPage` parameterized by a domain filter set
 - [x] Per-domain default action (toggle / turn_on / press / open dashboard)
 - [x] Context menu: Turn on, Turn off, Open in dashboard, Copy entity ID
 - [x] State-aware tags (ON / OFF) and domain tag
 - [x] 3-second list cache to keep search snappy
 - [x] Toast notifications on success / failure
 - [x] Demo mode (`DEMO_MODE` define) for Store screenshots
-- [ ] **TODO before publishing:** swap placeholder icons in `Assets/` for
-      Home Assistant–themed art
+- [x] HA-branded MSIX assets generated from official logo files
 - [ ] **TODO before publishing:** decide whether to keep token in
       `settings.json` or move to Windows Credential Manager
 
 ---
 
-## Phase 2 — Per-domain pages
+## Phase 2 — Domain-specific actions
 
-Goal: surface dedicated commands so users can jump straight to a domain.
-Each page is its own top-level `CommandItem` in `TopLevelCommands()`.
+Phase 1 ships per-domain *list pages*. Phase 2 layers on the rich,
+domain-specific actions Raycast supports.
 
-Pattern: each page filters `GET /api/states` to its domain, with
-domain-specific actions in MoreCommands.
-
-- [ ] **Lights** — list, toggle, **brightness slider** (call `light.turn_on`
-      with `brightness_pct`), **color picker** for RGB lights
+- [ ] **Lights** — brightness slider (call `light.turn_on` with
+      `brightness_pct`), color picker for RGB lights
 - [ ] **Covers** — open / close / stop / set position
 - [ ] **Media players** — play / pause / next / previous, volume up/down
-- [ ] **Scenes** — one-tap activate
-- [ ] **Scripts** — one-tap run, with optional input fields for scripts that
-      take parameters (later)
-- [ ] **Switches** — toggle-only list (no brightness clutter)
-- [ ] **Climate** — set HVAC mode (heat / cool / off), set target temp
-- [ ] **Automations** — toggle, trigger
-- [ ] **Sensors** — read-only list with values + units (filterable by device class)
-- [ ] **Batteries** — sensors with `device_class=battery`, sorted by level
-      ascending so low ones float to the top
-- [ ] **Persons / Zones** — read-only "who's home" view
-- [ ] **Custom Entities** — user-defined include / exclude glob (mirrors the
-      Raycast `customentities` command)
-
-Open question for Phase 2:
-- Should these be **separate top-level commands** (like Raycast does) or
-  sub-pages reachable from the main `Home Assistant` page? Top-level is more
-  discoverable; sub-pages are tidier. **Recommendation:** top-level, with
-  `disabledByDefault` for the niche ones (e.g. Persons, Zones) so the
-  command list isn't overwhelming out of the box.
+- [ ] **Scripts** — input fields for scripts that take parameters
+- [ ] **Climate** — set HVAC mode (heat / cool / off), set target temp,
+      fan mode
+- [ ] **Automations** — trigger (in addition to toggle)
+- [ ] **Sensors** — filter by `device_class`, sort by value
+- [ ] **Batteries** page — sensors with `device_class=battery`, sorted by
+      level ascending so low ones float to the top
+- [ ] **Doors / Windows / Motions** — derived pages from `binary_sensor`
+      filtered by `device_class` (door, window, motion, occupancy)
+- [ ] **All Entities with Attributes** — full attribute drill-down view
+      (Raycast `attributes`)
+- [ ] **Custom Entities** — user-defined include / exclude glob (Raycast
+      `customentities`); needs per-command settings if/when CmdPal supports
+      them, or a single global filter list in our `JsonSettingsManager`
 
 ---
 

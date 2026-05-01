@@ -13,8 +13,13 @@ Home Assistant entities from CmdPal.
 ## Phase 1 features
 
 - Settings: Home Assistant URL + Long-Lived Access Token (+ ignore-cert toggle)
-- Single top-level **Home Assistant** command (alias: `ha`)
-- Lists every entity from `GET /api/states`, searchable via CmdPal
+- One top-level command per domain, modeled on the Raycast extension:
+  All Entities, Lights, Switches, Covers, Fans, Media Players, Scenes,
+  Scripts, Automations, Sensors, Binary Sensors, Climate, Buttons, Persons,
+  Zones, Cameras, Vacuums, Helpers, Updates, Weather, plus an
+  **Open Dashboard** quick action
+- Each domain page lists matching entities from `GET /api/states`,
+  searchable via CmdPal
 - Default action toggles / activates / runs the entity (per-domain)
 - Context menu: Turn on, Turn off, Open in dashboard, Copy entity ID
 - Demo mode (`DEMO_MODE` define) for Microsoft Store screenshots
@@ -63,10 +68,14 @@ Settings are stored at:
 HomeAssistantCommandPalette/
 ├─ Commands/              # CallServiceCommand, OpenDashboardCommand
 ├─ Models/                # HaEntity, HaQueryResult
-├─ Pages/                 # HomeAssistantPage (the entity list)
+├─ Pages/                 # EntityListPage (filters by domain set)
 ├─ Services/              # HaSettings (JsonSettingsManager), HaApiClient (REST)
-└─ Assets/                # icons (replace placeholders with HA-themed art)
+└─ Assets/                # HA-branded MSIX icons
 ```
+
+The provider in `HomeAssistantCommandPaletteCommandsProvider.cs` declares
+the per-domain top-level commands as `DomainPage` records — add a new line
+there to expose another domain.
 
 ## Notes
 

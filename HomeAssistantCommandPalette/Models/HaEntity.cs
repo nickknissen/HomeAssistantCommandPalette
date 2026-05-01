@@ -15,6 +15,14 @@ public sealed class HaEntity
     public DateTimeOffset? LastChanged { get; init; }
     public DateTimeOffset? LastUpdated { get; init; }
 
+    /// <summary>
+    /// HA "area" (room) the entity is assigned to via the device/entity
+    /// registry. Resolved out-of-band from <c>/api/template</c> and stitched
+    /// onto the entity in <see cref="HomeAssistantCommandPalette.Services.HaApiClient"/>.
+    /// Null when the entity has no area assigned.
+    /// </summary>
+    public string? AreaName { get; init; }
+
     public string Domain
     {
         get
