@@ -20,7 +20,11 @@ $ErrorActionPreference = 'Stop'
 
 Add-Type -AssemblyName System.Drawing
 
-$logomark = Join-Path $SourceDir 'home-assistant-logomark-with-margins-color-on-light.png'
+# Use the no-margins logomark — the with-margins variant has so much
+# padding baked in that the icon looks small in dense UIs (e.g. CmdPal's
+# list-row icon slot). The Resize-Image -Padding parameter below adds
+# back any padding the MSIX validator needs.
+$logomark = Join-Path $SourceDir 'home-assistant-logomark-color-on-light.png'
 $wordmark = Join-Path $SourceDir 'home-assistant-wordmark-color-on-light.png'
 
 foreach ($f in @($logomark, $wordmark)) {
