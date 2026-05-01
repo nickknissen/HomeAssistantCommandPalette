@@ -203,6 +203,10 @@ internal sealed partial class EntityListPage : ListPage
         {
             AddAutomationRows(entity, meta);
         }
+        else if (entity.Domain == "weather")
+        {
+            AddWeatherRows(entity, meta);
+        }
         else if (entity.Domain == "sensor" || entity.Domain == "binary_sensor")
         {
             AddSensorRows(entity, meta);
@@ -267,6 +271,86 @@ internal sealed partial class EntityListPage : ListPage
         if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
         if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
         return when.ToLocalTime().ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static void AddWeatherRows(HaEntity entity, List<IDetailsElement> meta)
+    {
+        // HA reports the temperature unit on the weather entity itself
+        // (°C / °F). Pressure / wind / visibility / precipitation each
+        // carry their own *_unit; fall back to a sensible default if the
+        // integration omits one.
+        var tempUnit = (entity.Attributes.TryGetValue("temperature_unit", out var tu) && tu is string tus && !string.IsNullOrEmpty(tus)) ? tus : "°";
+
+        if (TryGetDouble(entity.Attributes, "temperature", out var temp))
+        {
+            meta.Add(Row("Temperature", $"{FormatNum(temp)} {tempUnit}"));
+        }
+        if (TryGetDouble(entity.Attributes, "apparent_temperature", out var feels))
+        {
+            meta.Add(Row("Feels like", $"{FormatNum(feels)} {tempUnit}"));
+        }
+        if (TryGetDouble(entity.Attributes, "dew_point", out var dew))
+        {
+            meta.Add(Row("Dew point", $"{FormatNum(dew)} {tempUnit}"));
+        }
+        if (TryGetDouble(entity.Attributes, "humidity", out var hum))
+        {
+            meta.Add(Row("Humidity", $"{(int)System.Math.Round(hum)}%"));
+        }
+        if (TryGetDouble(entity.Attributes, "pressure", out var pres))
+        {
+            var unit = (entity.Attributes.TryGetValue("pressure_unit", out var pu) && pu is string pus && !string.IsNullOrEmpty(pus)) ? pus : "hPa";
+            meta.Add(Row("Pressure", $"{FormatNum(pres)} {unit}"));
+        }
+        // Wind speed + bearing as a single row — bearing alone is hard to
+        // read; speed alone is missing the direction. e.g. "12 km/h NW (315°)".
+        if (TryGetDouble(entity.Attributes, "wind_speed", out var wind))
+        {
+            var unit = (entity.Attributes.TryGetValue("wind_speed_unit", out var wu) && wu is string wus && !string.IsNullOrEmpty(wus)) ? wus : "m/s";
+            var label = $"{FormatNum(wind)} {unit}";
+            if (TryGetDouble(entity.Attributes, "wind_bearing", out var bearing))
+            {
+                label = $"{label} {CompassFromBearing(bearing)} ({(int)System.Math.Round(bearing)}°)";
+            }
+            meta.Add(Row("Wind", label));
+        }
+        if (TryGetDouble(entity.Attributes, "wind_gust_speed", out var gust))
+        {
+            var unit = (entity.Attributes.TryGetValue("wind_speed_unit", out var wu) && wu is string wus && !string.IsNullOrEmpty(wus)) ? wus : "m/s";
+            meta.Add(Row("Wind gust", $"{FormatNum(gust)} {unit}"));
+        }
+        if (TryGetDouble(entity.Attributes, "visibility", out var vis))
+        {
+            var unit = (entity.Attributes.TryGetValue("visibility_unit", out var vu) && vu is string vus && !string.IsNullOrEmpty(vus)) ? vus : "km";
+            meta.Add(Row("Visibility", $"{FormatNum(vis)} {unit}"));
+        }
+        if (TryGetDouble(entity.Attributes, "cloud_coverage", out var cloud))
+        {
+            meta.Add(Row("Cloud cover", $"{(int)System.Math.Round(cloud)}%"));
+        }
+        if (TryGetDouble(entity.Attributes, "uv_index", out var uv))
+        {
+            meta.Add(Row("UV index", FormatNum(uv)));
+        }
+        if (TryGetDouble(entity.Attributes, "ozone", out var ozone))
+        {
+            meta.Add(Row("Ozone", $"{FormatNum(ozone)} DU"));
+        }
+        if (TryGetDouble(entity.Attributes, "precipitation", out var precip))
+        {
+            var unit = (entity.Attributes.TryGetValue("precipitation_unit", out var pcu) && pcu is string pcus && !string.IsNullOrEmpty(pcus)) ? pcus : "mm";
+            meta.Add(Row("Precipitation", $"{FormatNum(precip)} {unit}"));
+        }
+    }
+
+    private static string CompassFromBearing(double degrees)
+    {
+        // 16-point compass: N / NNE / NE / ENE / E / … / NNW. Each sector
+        // spans 22.5°, centred on the canonical bearing.
+        var dirs = new[] { "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW" };
+        var n = ((degrees % 360) + 360) % 360;
+        var idx = (int)System.Math.Round(n / 22.5) % 16;
+        return dirs[idx];
     }
 
     private static void AddSensorRows(HaEntity entity, List<IDetailsElement> meta)
