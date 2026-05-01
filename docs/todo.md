@@ -131,8 +131,10 @@ remaining domains live in the granular list below.
 - [ ] **All Entities with Attributes** — full attribute drill-down
 - [ ] **Custom Entities** — user-defined include / exclude glob
       (needs per-command settings or a single global filter list)
-- [ ] **Connection Check** — diagnostic page that pings `/api/` and reports
-      version, latency, and auth status (Raycast ships this disabled-by-default)
+- [x] **Connection Check** — pings `/api/config` and reports HA version,
+      location, time zone, run state, latency, configured URL, token
+      length (never the value), TLS-ignore flag; offers a deeplink to
+      settings on misconfiguration
 
 ---
 
