@@ -697,7 +697,7 @@ internal sealed partial class EntityListPage : ListPage
         if (entity.Domain == "camera") return unavailable ? Icons.CameraUnavailable : Icons.Camera;
         if (entity.Domain == "counter") return unavailable ? Icons.CounterUnavailable : Icons.Counter;
         if (entity.Domain == "button") return unavailable ? Icons.ButtonUnavailable : Icons.Button;
-        if (entity.Domain == "weather") return unavailable ? Icons.WeatherUnavailable : Icons.Weather;
+        if (entity.Domain == "weather") return Icons.WeatherForCondition(entity.State, unavailable);
 
         if (entity.Domain == "input_select") return Icons.InputSelect;
         if (entity.Domain == "input_button") return Icons.InputButton;

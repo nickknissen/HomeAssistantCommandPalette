@@ -137,8 +137,41 @@ internal static class Icons
     public static IconInfo ButtonUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\button-unavailable.svg");
     public static IconInfo Counter => IconHelpers.FromRelativePath("Assets\\Icons\\counter-off.svg");
     public static IconInfo CounterUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\counter-unavailable.svg");
+    // Weather fallback for unknown conditions (sunny shape, blue / grey).
     public static IconInfo Weather => IconHelpers.FromRelativePath("Assets\\Icons\\weather-off.svg");
     public static IconInfo WeatherUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\weather-unavailable.svg");
+
+    /// <summary>
+    /// Returns the icon for an HA weather condition string. Mirrors the
+    /// MDI weather glyph set the Home Assistant frontend uses
+    /// (weather-sunny / weather-cloudy / weather-rainy / …). Unknown
+    /// conditions fall back to the generic sunny icon.
+    /// </summary>
+    public static IconInfo WeatherForCondition(string condition, bool unavailable)
+    {
+        var stem = condition?.ToLowerInvariant() switch
+        {
+            "clear-night" => "weather-clear-night",
+            "cloudy" => "weather-cloudy",
+            "exceptional" => "weather-exceptional",
+            "fog" => "weather-fog",
+            "hail" => "weather-hail",
+            "lightning" => "weather-lightning",
+            "lightning-rainy" => "weather-lightning-rainy",
+            "partlycloudy" => "weather-partly-cloudy",
+            "pouring" => "weather-pouring",
+            "rainy" => "weather-rainy",
+            "snowy" => "weather-snowy",
+            "snowy-rainy" => "weather-snowy-rainy",
+            "sunny" => "weather-sunny",
+            "windy" => "weather-windy",
+            "windy-variant" => "weather-windy-variant",
+            _ => null,
+        };
+        if (stem is null) return unavailable ? WeatherUnavailable : Weather;
+        var suffix = unavailable ? "unavailable" : "off";
+        return IconHelpers.FromRelativePath($"Assets\\Icons\\{stem}-{suffix}.svg");
+    }
 
     // device_class icons for binary_sensor / sensor entities. State-bearing
     // ones (door / window / motion / connectivity / plug) follow the
