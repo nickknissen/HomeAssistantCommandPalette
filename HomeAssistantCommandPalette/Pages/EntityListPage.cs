@@ -1496,11 +1496,15 @@ internal sealed partial class EntityListPage : ListPage
         return items.ToArray();
     }
 
-    private static string BuildSubtitle(HaEntity entity)
+    private string BuildSubtitle(HaEntity entity)
     {
-        // Mirror the Raycast subtitle: area (room) name only. State stays
-        // in the tags. Empty when the entity has no area — a clean list
-        // beats noisy fallbacks.
+        // Power users wiring up automations want to see entity_id; the
+        // Show Entity IDs setting swaps it in. Default mirrors Raycast:
+        // area (room) name only — state lives in the tags.
+        if (_settings.ShowEntityId)
+        {
+            return entity.EntityId;
+        }
         return entity.AreaName ?? string.Empty;
     }
 
