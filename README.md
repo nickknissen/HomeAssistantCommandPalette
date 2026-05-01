@@ -8,7 +8,7 @@ Home Assistant entities from CmdPal.
 
 ## Status
 
-**Phase 1 — minimum viable.** See [`ha-plan.md`](ha-plan.md) for the roadmap.
+**Phase 1 — minimum viable.** See [`docs/todo.md`](docs/todo.md) for the roadmap.
 
 ## Phase 1 features
 
@@ -90,7 +90,7 @@ there to expose another domain.
 
 ## Roadmap
 
-See [`ha-plan.md`](ha-plan.md) for Phase 2 (per-domain pages) and Phase 3
+See [`docs/todo.md`](docs/todo.md) for Phase 2 (per-domain pages) and Phase 3
 (WebSocket live state, Assist, calendar/weather, etc.).
 
 ## License
