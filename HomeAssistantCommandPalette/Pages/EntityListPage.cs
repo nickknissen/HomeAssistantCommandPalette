@@ -128,7 +128,7 @@ internal sealed partial class EntityListPage : ListPage
         };
     }
 
-    private static Details BuildDetails(HaEntity entity)
+    private Details BuildDetails(HaEntity entity)
     {
         var meta = new List<IDetailsElement>
         {
@@ -193,11 +193,27 @@ internal sealed partial class EntityListPage : ListPage
 
         meta.Add(Row("Entity ID", entity.EntityId));
 
-        return new Details
+        var details = new Details
         {
             Title = entity.FriendlyName,
             Metadata = meta.ToArray(),
         };
+
+        if (entity.Domain == "camera")
+        {
+            // /api/camera_proxy/{entity_id} requires a Bearer header that
+            // CmdPal can't add to a remote URL, so we cache the bytes to a
+            // temp file and hand the file path to HeroImage. Returns null
+            // on auth/timeout failure — the rest of the details still
+            // render fine in that case.
+            var snapshot = _client.GetCameraSnapshotPath(entity.EntityId);
+            if (snapshot is not null)
+            {
+                details.HeroImage = new IconInfo(snapshot);
+            }
+        }
+
+        return details;
     }
 
     private static string FormatStateWithUnit(HaEntity entity)

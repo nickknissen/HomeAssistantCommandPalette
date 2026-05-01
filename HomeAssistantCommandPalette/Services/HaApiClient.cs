@@ -39,6 +39,13 @@ public sealed partial class HaApiClient : IDisposable
     // Areas rarely change — keep them around longer than the state cache.
     private static readonly TimeSpan AreaCacheTtl = TimeSpan.FromMinutes(5);
 
+    private readonly object _cameraCacheLock = new();
+    private readonly Dictionary<string, (string Path, DateTime FetchedAtUtc)> _cameraCache = new(StringComparer.Ordinal);
+    // Match Raycast's default camera refresh cadence — short enough that
+    // re-opening the page shows recent video, long enough to dedupe back-
+    // to-back GetItems calls on the same page render.
+    private static readonly TimeSpan CameraSnapshotTtl = TimeSpan.FromSeconds(5);
+
     // Single Jinja template that returns a JSON object mapping each
     // entity_id to its area name. HA's `area_name(entity_id)` walks
     // entity → device → area in the registry, matching the resolution
@@ -98,6 +105,67 @@ public sealed partial class HaApiClient : IDisposable
 
     public bool TryCallService(string domain, string service, string entityId, out string error)
         => TryCallService(domain, service, entityId, extraData: null, out error);
+
+    /// <summary>
+    /// Fetches the latest snapshot from <c>/api/camera_proxy/{entity_id}</c>
+    /// and writes it to a temp file. Returns the absolute file path on
+    /// success or null on any failure (auth, timeout, missing camera).
+    /// Cached per-entity for <see cref="CameraSnapshotTtl"/> so a single
+    /// page render with N cameras issues at most N HTTP gets, and a
+    /// follow-up render within the TTL re-uses the cached file.
+    /// </summary>
+    public string? GetCameraSnapshotPath(string entityId)
+    {
+        if (string.IsNullOrEmpty(entityId) || !_settings.IsConfigured) return null;
+
+        lock (_cameraCacheLock)
+        {
+            if (_cameraCache.TryGetValue(entityId, out var entry)
+                && DateTime.UtcNow - entry.FetchedAtUtc < CameraSnapshotTtl
+                && File.Exists(entry.Path))
+            {
+                return entry.Path;
+            }
+        }
+
+        try
+        {
+            var client = GetClient();
+            // Tighter timeout than DefaultTimeout — a stale camera should
+            // not block the entire camera list. ~3s is the same budget as
+            // a single REST call, and the file-cache means subsequent
+            // renders are free.
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            var url = $"{_settings.Url}/api/camera_proxy/{Uri.EscapeDataString(entityId)}";
+            var response = client.GetAsync(url, cts.Token).GetAwaiter().GetResult();
+            if (!response.IsSuccessStatusCode) return null;
+
+            var bytes = response.Content.ReadAsByteArrayAsync(cts.Token).GetAwaiter().GetResult();
+            if (bytes.Length == 0) return null;
+
+            var ext = response.Content.Headers.ContentType?.MediaType switch
+            {
+                "image/png" => "png",
+                _ => "jpg",
+            };
+            var safe = entityId.Replace('.', '_').Replace('/', '_').Replace('\\', '_');
+            var dir = Path.Combine(Path.GetTempPath(), "HomeAssistantCommandPalette", "camera");
+            Directory.CreateDirectory(dir);
+            var path = Path.Combine(dir, $"{safe}.{ext}");
+            File.WriteAllBytes(path, bytes);
+
+            lock (_cameraCacheLock)
+            {
+                _cameraCache[entityId] = (path, DateTime.UtcNow);
+            }
+            return path;
+        }
+        catch
+        {
+            // Best-effort: a transient failure shouldn't take down the page.
+            return null;
+        }
+    }
 
     /// <summary>
     /// Pings <c>GET /api/config</c> and reports HA's reported version,

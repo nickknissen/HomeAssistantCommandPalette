@@ -72,10 +72,17 @@ remaining domains live in the granular list below.
       ON/OFF tag (ON = update available)
 - [ ] **Scripts** — input form for scripts that take `fields` parameters
       (needs CmdPal Form support — defer if blocked)
-- [ ] **Cameras** — snapshot via `/api/camera_proxy/{entity_id}` rendered
-      in the details pane (`Details.HeroImage`); auto-refresh every 3 s
-      (expose interval as a setting like Raycast's `camerarefreshinterval`;
-      0 disables auto-refresh)
+- [x] **Cameras** — snapshot via `/api/camera_proxy/{entity_id}` written
+      to a temp file and rendered as `Details.HeroImage`; per-camera 5 s
+      cache in `HaApiClient` so a list render with N cameras issues at
+      most N HTTP gets
+
+### Cameras — additional actions to consider
+
+- [ ] Periodic auto-refresh (call `RaiseItemsChanged` on a 3 s timer
+      while the camera page is visible — currently snapshots only update
+      when CmdPal re-renders the list naturally)
+- [ ] Cleanup pass for stale temp snapshots on extension startup
 - [x] **Persons** — Location (lat/lon), GPS accuracy, Source tracker
       rows; Open in Google Maps + Copy user ID context actions
       (picture/HeroImage deferred — needs auth-aware image fetching)
