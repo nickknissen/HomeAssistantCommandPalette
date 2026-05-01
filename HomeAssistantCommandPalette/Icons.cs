@@ -31,6 +31,12 @@ internal static class Icons
     public static IconInfo CoverClosing => IconHelpers.FromRelativePath("Assets\\Icons\\arrow-down-box-off.svg");
     public static IconInfo CoverUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\window-closed-unavailable.svg");
 
+    // Media player state-tinted icons. Yellow when playing, blue when
+    // paused / idle / off, grey when unavailable.
+    public static IconInfo MediaPlayerPlaying => IconHelpers.FromRelativePath("Assets\\Icons\\cast-connected-on.svg");
+    public static IconInfo MediaPlayerIdle => IconHelpers.FromRelativePath("Assets\\Icons\\cast-connected-off.svg");
+    public static IconInfo MediaPlayerUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\cast-connected-unavailable.svg");
+
     // Service-call command icons (use the unbaked SVG; CmdPal renders them
     // in the palette's foreground color via currentColor).
     public static IconInfo Toggle => IconHelpers.FromRelativePath("Assets\\Icons\\toggle-switch-outline.svg");
@@ -40,4 +46,13 @@ internal static class Icons
     public static IconInfo Open => IconHelpers.FromRelativePath("Assets\\Icons\\arrow-up-box.svg");
     public static IconInfo Close => IconHelpers.FromRelativePath("Assets\\Icons\\arrow-down-box.svg");
     public static IconInfo Stop => IconHelpers.FromRelativePath("Assets\\Icons\\stop.svg");
+    public static IconInfo Play => IconHelpers.FromRelativePath("Assets\\Icons\\play.svg");
+    public static IconInfo Pause => IconHelpers.FromRelativePath("Assets\\Icons\\pause.svg");
+    public static IconInfo PlayPause => IconHelpers.FromRelativePath("Assets\\Icons\\play-pause.svg");
+    public static IconInfo Next => IconHelpers.FromRelativePath("Assets\\Icons\\skip-next.svg");
+    public static IconInfo Previous => IconHelpers.FromRelativePath("Assets\\Icons\\skip-previous.svg");
+    public static IconInfo Volume => IconHelpers.FromRelativePath("Assets\\Icons\\volume.svg");
+    public static IconInfo VolumeUp => IconHelpers.FromRelativePath("Assets\\Icons\\volume-plus.svg");
+    public static IconInfo VolumeDown => IconHelpers.FromRelativePath("Assets\\Icons\\volume-minus.svg");
+    public static IconInfo VolumeMute => IconHelpers.FromRelativePath("Assets\\Icons\\volume-off.svg");
 }
