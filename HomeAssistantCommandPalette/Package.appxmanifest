@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap3 rescap">
+
+  <Identity
+    Name="NickNissen.HomeAssistantforCommandPalette"
+    Publisher="CN=8E44B6E4-A8D0-49BB-8093-C2544C9DB8A7"
+    Version="0.1.0.0" />
+
+  <Properties>
+    <DisplayName>Home Assistant for Command Palette</DisplayName>
+    <PublisherDisplayName>NickNissen</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.19041.0" MaxVersionTested="10.0.19041.0" />
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.19041.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-US"/>
+  </Resources>
+
+  <Applications>
+    <Application Id="App"
+      Executable="$targetnametoken$.exe"
+      EntryPoint="$targetentrypoint$">
+      <uap:VisualElements
+        DisplayName="Home Assistant for Command Palette"
+        Description="Control your Home Assistant entities from PowerToys Command Palette"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+        <uap:SplashScreen Image="Assets\SplashScreen.png" />
+      </uap:VisualElements>
+      <Extensions>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:ExeServer Executable="HomeAssistantCommandPalette.exe" Arguments="-RegisterProcessAsComServer" DisplayName="Home Assistant for Command Palette">
+              <com:Class Id="7b1e5c8a-2d3f-4a6c-9b2e-3f4d5e6c7b8a" DisplayName="Home Assistant for Command Palette" />
+            </com:ExeServer>
+          </com:ComServer>
+        </com:Extension>
+        <uap3:Extension Category="windows.appExtension">
+          <uap3:AppExtension Name="com.microsoft.commandpalette"
+            Id="HomeAssistantCommandPalette"
+            PublicFolder="Public"
+            DisplayName="Home Assistant for Command Palette"
+            Description="Control your Home Assistant entities from PowerToys Command Palette">
+            <uap3:Properties>
+              <CmdPalProvider>
+                <Activation>
+                  <CreateInstance ClassId="7b1e5c8a-2d3f-4a6c-9b2e-3f4d5e6c7b8a" />
+                </Activation>
+                <SupportedInterfaces>
+                  <Commands/>
+                </SupportedInterfaces>
+              </CmdPalProvider>
+            </uap3:Properties>
+          </uap3:AppExtension>
+        </uap3:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <Capability Name="internetClient" />
+    <Capability Name="privateNetworkClientServer" />
+  </Capabilities>
+</Package>
