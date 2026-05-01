@@ -49,6 +49,12 @@ internal static class Icons
     public static IconInfo Thermostat => IconHelpers.FromRelativePath("Assets\\Icons\\thermostat.svg");
     public static IconInfo Fan => IconHelpers.FromRelativePath("Assets\\Icons\\fan.svg");
 
+    // Fan state-tinted icons. Yellow when on, blue when off, grey when
+    // unavailable.
+    public static IconInfo FanOn => IconHelpers.FromRelativePath("Assets\\Icons\\fan-on.svg");
+    public static IconInfo FanOff => IconHelpers.FromRelativePath("Assets\\Icons\\fan-off.svg");
+    public static IconInfo FanUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\fan-unavailable.svg");
+
     // Vacuum state-tinted icons. Yellow when cleaning, blue when docked /
     // idle / paused / returning, grey when unavailable.
     public static IconInfo VacuumCleaning => IconHelpers.FromRelativePath("Assets\\Icons\\robot-vacuum-on.svg");
