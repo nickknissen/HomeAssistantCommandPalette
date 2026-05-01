@@ -46,6 +46,13 @@ public sealed partial class HaApiClient : IDisposable
     // to-back GetItems calls on the same page render.
     private static readonly TimeSpan CameraSnapshotTtl = TimeSpan.FromSeconds(5);
 
+    private readonly object _pictureCacheLock = new();
+    private readonly Dictionary<string, (string Url, string Path, DateTime FetchedAtUtc)> _pictureCache = new(StringComparer.Ordinal);
+    // Avatars / entity pictures change rarely. A long TTL keeps repeat
+    // page renders cheap; if the picture is updated in HA it'll surface on
+    // the next CmdPal restart.
+    private static readonly TimeSpan EntityPictureTtl = TimeSpan.FromMinutes(15);
+
     // Single Jinja template that returns a JSON object mapping each
     // entity_id to its area name. HA's `area_name(entity_id)` walks
     // entity → device → area in the registry, matching the resolution
@@ -163,6 +170,81 @@ public sealed partial class HaApiClient : IDisposable
         catch
         {
             // Best-effort: a transient failure shouldn't take down the page.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Fetches an authenticated entity picture (e.g. <c>entity_picture</c>
+    /// from a person entity). The path may be relative (HA-served, prefixed
+    /// with the configured URL) or absolute (an arbitrary HTTPS URL — only
+    /// the relative form gets a Bearer header attached). Returns the cached
+    /// file path on success, or null on any failure. Cached separately
+    /// from camera snapshots and per-(entity_id, url) so the file is
+    /// re-fetched if HA rotates the URL.
+    /// </summary>
+    public string? GetEntityPicturePath(string entityId, string entityPicture)
+    {
+        if (string.IsNullOrEmpty(entityId) || string.IsNullOrEmpty(entityPicture) || !_settings.IsConfigured)
+            return null;
+
+        lock (_pictureCacheLock)
+        {
+            if (_pictureCache.TryGetValue(entityId, out var entry)
+                && entry.Url == entityPicture
+                && DateTime.UtcNow - entry.FetchedAtUtc < EntityPictureTtl
+                && File.Exists(entry.Path))
+            {
+                return entry.Path;
+            }
+        }
+
+        try
+        {
+            var isRelative = entityPicture.StartsWith('/');
+            var url = isRelative
+                ? $"{_settings.Url.TrimEnd('/')}{entityPicture}"
+                : entityPicture;
+
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            HttpResponseMessage response;
+            if (isRelative)
+            {
+                // HA-served — reuse the authed client.
+                response = GetClient().GetAsync(url, cts.Token).GetAwaiter().GetResult();
+            }
+            else
+            {
+                // External URL (e.g. Gravatar, a CDN). No bearer.
+                using var anon = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+                response = anon.GetAsync(url, cts.Token).GetAwaiter().GetResult();
+            }
+            if (!response.IsSuccessStatusCode) return null;
+
+            var bytes = response.Content.ReadAsByteArrayAsync(cts.Token).GetAwaiter().GetResult();
+            if (bytes.Length == 0) return null;
+
+            var ext = response.Content.Headers.ContentType?.MediaType switch
+            {
+                "image/png" => "png",
+                "image/svg+xml" => "svg",
+                "image/webp" => "webp",
+                _ => "jpg",
+            };
+            var safe = entityId.Replace('.', '_').Replace('/', '_').Replace('\\', '_');
+            var dir = Path.Combine(Path.GetTempPath(), "HomeAssistantCommandPalette", "picture");
+            Directory.CreateDirectory(dir);
+            var path = Path.Combine(dir, $"{safe}.{ext}");
+            File.WriteAllBytes(path, bytes);
+
+            lock (_pictureCacheLock)
+            {
+                _pictureCache[entityId] = (entityPicture, path, DateTime.UtcNow);
+            }
+            return path;
+        }
+        catch
+        {
             return null;
         }
     }
