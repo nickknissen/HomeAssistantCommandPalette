@@ -137,6 +137,10 @@ internal sealed partial class EntityListPage : ListPage
         {
             AddFanRows(entity, meta);
         }
+        else if (entity.Domain == "person")
+        {
+            AddPersonRows(entity, meta);
+        }
         else if (entity.Domain == "automation")
         {
             AddAutomationRows(entity, meta);
@@ -226,6 +230,40 @@ internal sealed partial class EntityListPage : ListPage
         {
             meta.Add(Row("Effect", fxs));
         }
+    }
+
+    private static void AddPersonRows(HaEntity entity, List<IDetailsElement> meta)
+    {
+        // Person `state` is the zone name ("home" / "not_home" / a custom
+        // zone). Lat/lon come from whichever device_tracker reports the
+        // freshest data; HA exposes that tracker via the `source` attribute.
+        if (TryGetDouble(entity.Attributes, "latitude", out var lat) &&
+            TryGetDouble(entity.Attributes, "longitude", out var lon))
+        {
+            meta.Add(Row("Location", $"{lat}, {lon}"));
+        }
+        if (TryGetDouble(entity.Attributes, "gps_accuracy", out var acc))
+        {
+            meta.Add(Row("GPS accuracy", $"{(int)acc} m"));
+        }
+        if (entity.Attributes.TryGetValue("source", out var src) && src is string srcs && !string.IsNullOrEmpty(srcs))
+        {
+            meta.Add(Row("Source", srcs));
+        }
+    }
+
+    private static bool TryGetDouble(IReadOnlyDictionary<string, object?> attrs, string key, out double value)
+    {
+        if (attrs.TryGetValue(key, out var v))
+        {
+            switch (v)
+            {
+                case double d: value = d; return true;
+                case long l: value = l; return true;
+            }
+        }
+        value = 0;
+        return false;
     }
 
     private static void AddFanRows(HaEntity entity, List<IDetailsElement> meta)
@@ -895,6 +933,24 @@ internal sealed partial class EntityListPage : ListPage
                     Icon = Icons.Stop,
                     MoreCommands = presets,
                 });
+            }
+        }
+
+        if (entity.Domain == "person")
+        {
+            // Open in Google Maps — universal across platforms (Apple Maps
+            // is macOS-only, so we don't ship it on Windows).
+            if (TryGetDouble(entity.Attributes, "latitude", out var lat) &&
+                TryGetDouble(entity.Attributes, "longitude", out var lon))
+            {
+                var url = $"https://www.google.com/maps/search/?api=1&query={lat.ToString(System.Globalization.CultureInfo.InvariantCulture)},{lon.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+                items.Add(new CommandContextItem(new OpenUrlCommand(url) { Name = "Open in Google Maps" }));
+            }
+            // user_id is the HA user UUID this person is linked to — handy
+            // when wiring up automations or template conditions.
+            if (entity.Attributes.TryGetValue("user_id", out var uid) && uid is string uids && !string.IsNullOrEmpty(uids))
+            {
+                items.Add(new CommandContextItem(new CopyTextCommand(uids) { Name = "Copy user ID" }));
             }
         }
 
