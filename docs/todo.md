@@ -205,7 +205,6 @@ APIs.
 ## Pre-publish polish
 
 - [ ] Decide token storage: keep in `settings.json` vs. Windows Credential Manager. Document the trade-off in README.
-- [ ] Wire up GitHub Actions release workflow (port from SSMS / Tailscale)
 - [ ] Microsoft Store listing assets (use the `cmdpal-publishing` skill when the extension is feature-complete)
 - [ ] Replace `dev-deploy.ps1`'s 1Password dependency with an optional self-signed cert path so first-time contributors can deploy without our shared cert
 - [ ] Privacy policy page on s-nissen.dk/privacy

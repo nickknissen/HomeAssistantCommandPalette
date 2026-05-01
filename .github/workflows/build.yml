@@ -1,0 +1,35 @@
+name: Build Extension
+
+on:
+  push:
+    branches: [main]
+    tags-ignore:
+      - "**"
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        platform: [x64, arm64]
+    env:
+      NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Build Extension (${{ matrix.platform }})
+        run: >-
+          dotnet build HomeAssistantCommandPalette/HomeAssistantCommandPalette.csproj
+          --configuration Release
+          -p:Platform=${{ matrix.platform }}
+          -p:RuntimeIdentifier=win-${{ matrix.platform }}
+          -p:PublishSingleFile=false
+          -p:PublishTrimmed=false
