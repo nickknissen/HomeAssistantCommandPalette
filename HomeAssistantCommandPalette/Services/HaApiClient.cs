@@ -268,6 +268,44 @@ public sealed partial class HaApiClient : IDisposable
     }
 
     /// <summary>
+    /// Sweeps temp snapshot / entity-picture files older than one hour.
+    /// Called once at extension startup — the in-memory cache resets on
+    /// restart, so any file from a previous session is unreachable. The
+    /// 1 h threshold leaves a safety margin if a second CmdPal process
+    /// is racing the cleanup. Best-effort: a failure is silent.
+    /// </summary>
+    public static void CleanupStaleSnapshots()
+    {
+        var cutoff = DateTime.UtcNow - TimeSpan.FromHours(1);
+        foreach (var sub in new[] { "camera", "picture" })
+        {
+            try
+            {
+                var dir = Path.Combine(Path.GetTempPath(), "HomeAssistantCommandPalette", sub);
+                if (!Directory.Exists(dir)) continue;
+                foreach (var path in Directory.EnumerateFiles(dir))
+                {
+                    try
+                    {
+                        if (File.GetLastWriteTimeUtc(path) < cutoff)
+                        {
+                            File.Delete(path);
+                        }
+                    }
+                    catch
+                    {
+                        // File in use, locked, or vanished — skip it.
+                    }
+                }
+            }
+            catch
+            {
+                // Permission or I/O error reading the dir — skip the sweep.
+            }
+        }
+    }
+
+    /// <summary>
     /// Pings <c>GET /api/config</c> and reports HA's reported version,
     /// location, time zone, run state and round-trip latency. Used by the
     /// Connection Check diagnostic page; intentionally avoids the state
