@@ -19,7 +19,9 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
     private sealed record DomainPage(
         string Title,
         string Id,
-        IReadOnlyCollection<string>? Domains);
+        IReadOnlyCollection<string>? Domains,
+        IReadOnlyCollection<string>? DeviceClasses = null,
+        bool SortByNumericStateAscending = false);
 
     private static readonly DomainPage[] DomainPages =
     [
@@ -47,6 +49,14 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
             ]),
         new("Updates",        "ha.updates",          ["update"]),
         new("Weather",        "ha.weather",          ["weather"]),
+
+        // device_class filtered pages — Raycast parity. Lowest-charge
+        // batteries surface first; doors/windows/motions are
+        // single-purpose binary_sensor views.
+        new("Batteries",      "ha.batteries",        ["sensor"],        ["battery"], SortByNumericStateAscending: true),
+        new("Doors",          "ha.doors",            ["binary_sensor"], ["door"]),
+        new("Windows",        "ha.windows",          ["binary_sensor"], ["window"]),
+        new("Motions",        "ha.motions",          ["binary_sensor"], ["motion", "occupancy"]),
     ];
 
     private readonly HaSettings _settings;
@@ -66,7 +76,9 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
 
         foreach (var page in DomainPages)
         {
-            commands.Add(new CommandItem(new EntityListPage(_settings, _apiClient, page.Title, page.Id, page.Domains, Icons.App))
+            commands.Add(new CommandItem(new EntityListPage(
+                _settings, _apiClient, page.Title, page.Id, page.Domains, Icons.App,
+                page.DeviceClasses, page.SortByNumericStateAscending))
             {
                 Title = page.Title,
                 Subtitle = "Home Assistant",
