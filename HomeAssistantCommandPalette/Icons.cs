@@ -72,6 +72,113 @@ internal static class Icons
     // "Trigger automation" — lightning bolt suggests "fire now".
     public static IconInfo Trigger => IconHelpers.FromRelativePath("Assets\\Icons\\flash.svg");
 
+    // Helper-domain icons. Mirrors the Raycast extension's MDI choices:
+    //   input_boolean → toggle-switch (slider position differs by state)
+    //   timer         → av-timer (yellow when active)
+    //   input_select  → format-list-bulleted
+    //   input_button  → gesture-tap-button
+    //   input_number  → ray-vertex
+    //   input_text    → form-textbox
+    //   input_datetime → calendar-clock / calendar / clock-time-four
+    //                    depending on has_date / has_time
+    public static IconInfo InputBooleanOn => IconHelpers.FromRelativePath("Assets\\Icons\\input-boolean-on.svg");
+    public static IconInfo InputBooleanOff => IconHelpers.FromRelativePath("Assets\\Icons\\input-boolean-off.svg");
+    public static IconInfo InputBooleanUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\input-boolean-unavailable.svg");
+    public static IconInfo TimerOn => IconHelpers.FromRelativePath("Assets\\Icons\\av-timer-on.svg");
+    public static IconInfo TimerOff => IconHelpers.FromRelativePath("Assets\\Icons\\av-timer-off.svg");
+    public static IconInfo TimerUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\av-timer-unavailable.svg");
+    public static IconInfo InputSelect => IconHelpers.FromRelativePath("Assets\\Icons\\input-select.svg");
+    public static IconInfo InputButton => IconHelpers.FromRelativePath("Assets\\Icons\\input-button.svg");
+    public static IconInfo InputNumber => IconHelpers.FromRelativePath("Assets\\Icons\\input-number.svg");
+    public static IconInfo InputText => IconHelpers.FromRelativePath("Assets\\Icons\\input-text.svg");
+    public static IconInfo InputDateTime => IconHelpers.FromRelativePath("Assets\\Icons\\input-datetime.svg");
+    public static IconInfo InputDate => IconHelpers.FromRelativePath("Assets\\Icons\\input-datetime-date.svg");
+    public static IconInfo InputTime => IconHelpers.FromRelativePath("Assets\\Icons\\input-datetime-time.svg");
+
+    // Switch state-tinted icons. Toggle-position changes between on/off
+    // (slider on the right vs left); colour mirrors the standard palette.
+    public static IconInfo SwitchOn => IconHelpers.FromRelativePath("Assets\\Icons\\switch-on.svg");
+    public static IconInfo SwitchOff => IconHelpers.FromRelativePath("Assets\\Icons\\switch-off.svg");
+    public static IconInfo SwitchUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\switch-unavailable.svg");
+
+    // Script state-tinted icons. Yellow while running (state="on"), blue
+    // when idle, grey when unavailable. Reuses the play.svg geometry.
+    public static IconInfo ScriptOn => IconHelpers.FromRelativePath("Assets\\Icons\\script-on.svg");
+    public static IconInfo ScriptOff => IconHelpers.FromRelativePath("Assets\\Icons\\script-off.svg");
+    public static IconInfo ScriptUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\script-unavailable.svg");
+
+    // Update state-tinted icons. Yellow when an update is available
+    // (state="on"), blue when up-to-date, grey when unavailable.
+    public static IconInfo UpdateOn => IconHelpers.FromRelativePath("Assets\\Icons\\update-on.svg");
+    public static IconInfo UpdateOff => IconHelpers.FromRelativePath("Assets\\Icons\\update-off.svg");
+    public static IconInfo UpdateUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\update-unavailable.svg");
+
+    // Person state-tinted icons. Yellow when home, blue otherwise, grey
+    // when unavailable. The full picture from `entity_picture` is used at
+    // the call site when present.
+    public static IconInfo PersonOn => IconHelpers.FromRelativePath("Assets\\Icons\\person-on.svg");
+    public static IconInfo PersonOff => IconHelpers.FromRelativePath("Assets\\Icons\\person-off.svg");
+    public static IconInfo PersonUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\person-unavailable.svg");
+
+    // sun.sun has two valid states: "above_horizon" (yellow sun) and
+    // "below_horizon" (blue moon). Grey for unavailable.
+    public static IconInfo SunDay => IconHelpers.FromRelativePath("Assets\\Icons\\sun-on.svg");
+    public static IconInfo SunNight => IconHelpers.FromRelativePath("Assets\\Icons\\sun-off.svg");
+    public static IconInfo SunUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\sun-unavailable.svg");
+
+    // Stateless single-blue domain icons.
+    public static IconInfo Scene => IconHelpers.FromRelativePath("Assets\\Icons\\scene-off.svg");
+    public static IconInfo SceneUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\scene-unavailable.svg");
+    public static IconInfo Zone => IconHelpers.FromRelativePath("Assets\\Icons\\zone-off.svg");
+    public static IconInfo ZoneUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\zone-unavailable.svg");
+    public static IconInfo Camera => IconHelpers.FromRelativePath("Assets\\Icons\\camera-off.svg");
+    public static IconInfo CameraUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\camera-unavailable.svg");
+    public static IconInfo Button => IconHelpers.FromRelativePath("Assets\\Icons\\button-off.svg");
+    public static IconInfo ButtonUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\button-unavailable.svg");
+    public static IconInfo Counter => IconHelpers.FromRelativePath("Assets\\Icons\\counter-off.svg");
+    public static IconInfo CounterUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\counter-unavailable.svg");
+    public static IconInfo Weather => IconHelpers.FromRelativePath("Assets\\Icons\\weather-off.svg");
+    public static IconInfo WeatherUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\weather-unavailable.svg");
+
+    // device_class icons for binary_sensor / sensor entities. State-bearing
+    // ones (door / window / motion / connectivity / plug) follow the
+    // yellow/blue/grey palette; the others are always blue with a grey
+    // unavailable fallback.
+    public static IconInfo DoorOpen => IconHelpers.FromRelativePath("Assets\\Icons\\door-on.svg");
+    public static IconInfo DoorClosed => IconHelpers.FromRelativePath("Assets\\Icons\\door-off.svg");
+    public static IconInfo DoorUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\door-unavailable.svg");
+    public static IconInfo WindowOpen => IconHelpers.FromRelativePath("Assets\\Icons\\window-binary-on.svg");
+    public static IconInfo WindowClosed => IconHelpers.FromRelativePath("Assets\\Icons\\window-binary-off.svg");
+    public static IconInfo WindowUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\window-binary-unavailable.svg");
+    public static IconInfo MotionDetected => IconHelpers.FromRelativePath("Assets\\Icons\\motion-on.svg");
+    public static IconInfo MotionClear => IconHelpers.FromRelativePath("Assets\\Icons\\motion-off.svg");
+    public static IconInfo MotionUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\motion-unavailable.svg");
+    public static IconInfo ConnectivityOn => IconHelpers.FromRelativePath("Assets\\Icons\\connectivity-on.svg");
+    public static IconInfo ConnectivityOff => IconHelpers.FromRelativePath("Assets\\Icons\\connectivity-off.svg");
+    public static IconInfo ConnectivityUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\connectivity-unavailable.svg");
+    public static IconInfo PlugOn => IconHelpers.FromRelativePath("Assets\\Icons\\plug-on.svg");
+    public static IconInfo PlugOff => IconHelpers.FromRelativePath("Assets\\Icons\\plug-off.svg");
+    public static IconInfo PlugUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\plug-unavailable.svg");
+
+    public static IconInfo Temperature => IconHelpers.FromRelativePath("Assets\\Icons\\temperature-off.svg");
+    public static IconInfo TemperatureUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\temperature-unavailable.svg");
+    public static IconInfo Humidity => IconHelpers.FromRelativePath("Assets\\Icons\\humidity-off.svg");
+    public static IconInfo HumidityUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\humidity-unavailable.svg");
+    public static IconInfo Pressure => IconHelpers.FromRelativePath("Assets\\Icons\\pressure-off.svg");
+    public static IconInfo PressureUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\pressure-unavailable.svg");
+    public static IconInfo Energy => IconHelpers.FromRelativePath("Assets\\Icons\\energy-off.svg");
+    public static IconInfo EnergyUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\energy-unavailable.svg");
+    public static IconInfo PowerFactor => IconHelpers.FromRelativePath("Assets\\Icons\\power-factor-off.svg");
+    public static IconInfo PowerFactorUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\power-factor-unavailable.svg");
+    public static IconInfo CarbonDioxide => IconHelpers.FromRelativePath("Assets\\Icons\\carbon-dioxide-off.svg");
+    public static IconInfo CarbonDioxideUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\carbon-dioxide-unavailable.svg");
+    public static IconInfo Battery => IconHelpers.FromRelativePath("Assets\\Icons\\battery-off.svg");
+    public static IconInfo BatteryUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\battery-unavailable.svg");
+
+    // Generic fallback when no domain or device_class match is found.
+    public static IconInfo Shape => IconHelpers.FromRelativePath("Assets\\Icons\\shape-off.svg");
+    public static IconInfo ShapeUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\shape-unavailable.svg");
+
     // Service-call command icons (use the unbaked SVG; CmdPal renders them
     // in the palette's foreground color via currentColor).
     public static IconInfo Toggle => IconHelpers.FromRelativePath("Assets\\Icons\\toggle-switch-outline.svg");
