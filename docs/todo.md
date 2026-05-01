@@ -123,10 +123,10 @@ remaining domains live in the granular list below.
 
 ### New filtered top-level pages (Raycast parity)
 
-- [ ] **Batteries** — sensors with `device_class=battery`, sorted ascending
-- [ ] **Doors** — `binary_sensor` + `device_class=door`
-- [ ] **Windows** — `binary_sensor` + `device_class=window`
-- [ ] **Motions** — `binary_sensor` + `device_class=motion` /
+- [x] **Batteries** — sensors with `device_class=battery`, sorted ascending
+- [x] **Doors** — `binary_sensor` + `device_class=door`
+- [x] **Windows** — `binary_sensor` + `device_class=window`
+- [x] **Motions** — `binary_sensor` + `device_class=motion` /
       `device_class=occupancy`
 - [ ] **All Entities with Attributes** — full attribute drill-down
 - [ ] **Custom Entities** — user-defined include / exclude glob

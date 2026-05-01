@@ -19,6 +19,8 @@ internal sealed partial class EntityListPage : ListPage
     private readonly HaSettings _settings;
     private readonly HaApiClient _client;
     private readonly HashSet<string>? _domains;
+    private readonly HashSet<string>? _deviceClasses;
+    private readonly bool _sortByNumericStateAscending;
 
     public EntityListPage(
         HaSettings settings,
@@ -26,11 +28,15 @@ internal sealed partial class EntityListPage : ListPage
         string title,
         string id,
         IReadOnlyCollection<string>? domains = null,
-        IconInfo? icon = null)
+        IconInfo? icon = null,
+        IReadOnlyCollection<string>? deviceClasses = null,
+        bool sortByNumericStateAscending = false)
     {
         _settings = settings;
         _client = client;
         _domains = domains is null ? null : new HashSet<string>(domains, StringComparer.Ordinal);
+        _deviceClasses = deviceClasses is null ? null : new HashSet<string>(deviceClasses, StringComparer.Ordinal);
+        _sortByNumericStateAscending = sortByNumericStateAscending;
 
         Icon = icon ?? Icons.App;
         Title = title;
@@ -69,9 +75,25 @@ internal sealed partial class EntityListPage : ListPage
             ];
         }
 
-        var items = _domains is null
-            ? result.Items
-            : result.Items.Where(e => _domains.Contains(e.Domain));
+        IEnumerable<HaEntity> items = result.Items;
+        if (_domains is not null)
+        {
+            items = items.Where(e => _domains.Contains(e.Domain));
+        }
+        if (_deviceClasses is not null)
+        {
+            items = items.Where(e => e.Attributes.TryGetValue("device_class", out var dc)
+                && dc is string dcs && _deviceClasses.Contains(dcs));
+        }
+        if (_sortByNumericStateAscending)
+        {
+            // Used by the Batteries page to surface lowest-charge sensors
+            // first. Non-numeric states (e.g. "unavailable") sort to the
+            // end via double.PositiveInfinity.
+            items = items.OrderBy(e => double.TryParse(e.State,
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : double.PositiveInfinity);
+        }
 
         return items.Select(CreateItem).ToArray();
     }
