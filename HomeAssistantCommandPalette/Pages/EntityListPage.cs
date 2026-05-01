@@ -94,13 +94,14 @@ internal sealed partial class EntityListPage : ListPage
 
     private ListItem CreateItem(HaEntity entity)
     {
-        return new ListItem(BuildPrimaryCommand(entity))
+        var primary = BuildPrimaryCommand(entity);
+        return new ListItem(primary)
         {
             Title = entity.FriendlyName,
             Subtitle = BuildSubtitle(entity),
             Tags = BuildTags(entity),
             Icon = IconForEntity(entity),
-            MoreCommands = BuildContextCommands(entity),
+            MoreCommands = BuildContextCommands(entity, primary),
             Details = BuildDetails(entity),
         };
     }
@@ -127,6 +128,10 @@ internal sealed partial class EntityListPage : ListPage
         else if (entity.Domain == "climate")
         {
             AddClimateRows(entity, meta);
+        }
+        else if (entity.Domain == "vacuum")
+        {
+            AddVacuumRows(entity, meta);
         }
 
         if (!string.IsNullOrEmpty(entity.AreaName))
@@ -164,6 +169,28 @@ internal sealed partial class EntityListPage : ListPage
         if (entity.Attributes.TryGetValue("effect", out var fx) && fx is string fxs && !string.IsNullOrEmpty(fxs) && !string.Equals(fxs, "none", System.StringComparison.OrdinalIgnoreCase))
         {
             meta.Add(Row("Effect", fxs));
+        }
+    }
+
+    private static void AddVacuumRows(HaEntity entity, List<IDetailsElement> meta)
+    {
+        if (entity.Attributes.TryGetValue("status", out var st) && st is string sts && !string.IsNullOrEmpty(sts))
+        {
+            meta.Add(Row("Status", sts));
+        }
+        if (entity.Attributes.TryGetValue("battery_level", out var bat))
+        {
+            var v = bat switch { long l => $"{l}%", double d => $"{(int)d}%", _ => null };
+            if (v is not null) meta.Add(Row("Battery", v));
+        }
+        if (entity.Attributes.TryGetValue("fan_speed", out var fs) && fs is string fss && !string.IsNullOrEmpty(fss))
+        {
+            meta.Add(Row("Fan speed", fss));
+        }
+        if (entity.Attributes.TryGetValue("cleaned_area", out var area))
+        {
+            var v = area switch { long l => $"{l} m²", double d => $"{d} m²", _ => null };
+            if (v is not null) meta.Add(Row("Cleaned", v));
         }
     }
 
@@ -305,6 +332,14 @@ internal sealed partial class EntityListPage : ListPage
             };
         }
 
+        if (entity.Domain == "vacuum")
+        {
+            if (unavailable) return Icons.VacuumUnavailable;
+            return string.Equals(entity.State, "cleaning", System.StringComparison.OrdinalIgnoreCase)
+                ? Icons.VacuumCleaning
+                : Icons.VacuumIdle;
+        }
+
         return Icons.App;
     }
 
@@ -322,6 +357,10 @@ internal sealed partial class EntityListPage : ListPage
                 => new CallServiceCommand(_client, "script", "turn_on", entity.EntityId, $"Run {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded),
             "button" or "input_button"
                 => new CallServiceCommand(_client, entity.Domain, "press", entity.EntityId, $"Press {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded),
+            "vacuum"
+                => string.Equals(entity.State, "cleaning", System.StringComparison.OrdinalIgnoreCase)
+                    ? new CallServiceCommand(_client, "vacuum", "pause", entity.EntityId, $"Pause {entity.FriendlyName}", icon: Icons.Pause, onSuccess: OnServiceCallSucceeded)
+                    : new CallServiceCommand(_client, "vacuum", "start", entity.EntityId, $"Start {entity.FriendlyName}", icon: Icons.Play, onSuccess: OnServiceCallSucceeded),
             _ => new OpenDashboardCommand(_settings, entity.EntityId),
         };
     }
@@ -413,7 +452,7 @@ internal sealed partial class EntityListPage : ListPage
         };
     }
 
-    private IContextItem[] BuildContextCommands(HaEntity entity)
+    private IContextItem[] BuildContextCommands(HaEntity entity, ICommand primary)
     {
         var items = new List<IContextItem>(8);
 
@@ -577,6 +616,69 @@ internal sealed partial class EntityListPage : ListPage
             }
         }
 
+        if (entity.Domain == "vacuum")
+        {
+            // supported_features bits — only surface actions the device
+            // declares it can do. Bit values from HA's vacuum component:
+            //   1 TURN_ON, 2 TURN_OFF, 4 PAUSE, 8 STOP, 16 RETURN_HOME,
+            //   32 FAN_SPEED, 64 BATTERY, 128 STATUS, 256 SEND_COMMAND,
+            //   512 LOCATE, 1024 CLEAN_SPOT, 4096 STATE, 8192 START.
+            var sf = entity.Attributes.TryGetValue("supported_features", out var sfo) && sfo is long b ? b : -1;
+            bool Has(long bit) => sf < 0 || (sf & bit) == bit;
+
+            if (Has(8192))
+            {
+                items.Add(new CommandContextItem(
+                    new CallServiceCommand(_client, "vacuum", "start", entity.EntityId, $"Start {entity.FriendlyName}", icon: Icons.Play, onSuccess: OnServiceCallSucceeded)));
+            }
+            if (Has(4))
+            {
+                items.Add(new CommandContextItem(
+                    new CallServiceCommand(_client, "vacuum", "pause", entity.EntityId, $"Pause {entity.FriendlyName}", icon: Icons.Pause, onSuccess: OnServiceCallSucceeded)));
+            }
+            if (Has(8))
+            {
+                items.Add(new CommandContextItem(
+                    new CallServiceCommand(_client, "vacuum", "stop", entity.EntityId, $"Stop {entity.FriendlyName}", icon: Icons.Stop, onSuccess: OnServiceCallSucceeded)));
+            }
+            if (Has(16))
+            {
+                items.Add(new CommandContextItem(
+                    new CallServiceCommand(_client, "vacuum", "return_to_base", entity.EntityId, $"Send {entity.FriendlyName} home", icon: Icons.Home, onSuccess: OnServiceCallSucceeded)));
+            }
+            if (Has(512))
+            {
+                items.Add(new CommandContextItem(
+                    new CallServiceCommand(_client, "vacuum", "locate", entity.EntityId, $"Locate {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
+            }
+            if (Has(1024))
+            {
+                items.Add(new CommandContextItem(
+                    new CallServiceCommand(_client, "vacuum", "clean_spot", entity.EntityId, $"Clean spot with {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
+            }
+            // Fan speed submenu when the vacuum reports fan_speed_list and
+            // supports FAN_SPEED.
+            if (Has(32) && entity.Attributes.TryGetValue("fan_speed_list", out var fsl) && fsl is List<object?> speeds)
+            {
+                var speedItems = speeds
+                    .OfType<string>()
+                    .Select(s => (IContextItem)new CommandContextItem(new CallServiceCommand(
+                        _client, "vacuum", "set_fan_speed", entity.EntityId,
+                        s, extraData: new Dictionary<string, object?> { ["fan_speed"] = s },
+                        onSuccess: OnServiceCallSucceeded)))
+                    .ToArray();
+                if (speedItems.Length > 0)
+                {
+                    items.Add(new CommandContextItem(new NoOpCommand())
+                    {
+                        Title = "Set fan speed…",
+                        Icon = Icons.Fan,
+                        MoreCommands = speedItems,
+                    });
+                }
+            }
+        }
+
         if (entity.Domain == "cover")
         {
             items.Add(new CommandContextItem(
@@ -608,7 +710,12 @@ internal sealed partial class EntityListPage : ListPage
             }
         }
 
-        items.Add(new CommandContextItem(new OpenDashboardCommand(_settings, entity.EntityId)));
+        // Skip the dashboard context item when it'd duplicate the primary
+        // action (sensors, climate, weather, etc. fall through to dashboard).
+        if (primary is not OpenDashboardCommand)
+        {
+            items.Add(new CommandContextItem(new OpenDashboardCommand(_settings, entity.EntityId)));
+        }
         items.Add(new CommandContextItem(new CopyTextCommand(entity.EntityId)
         {
             Name = "Copy entity ID",
