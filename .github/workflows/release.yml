@@ -1,0 +1,63 @@
+name: Release Extension
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (e.g. 1.0.0)"
+        required: true
+      release_notes:
+        description: "Release notes"
+        required: false
+        default: ""
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    runs-on: windows-2022
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Build signed MSIX (x64 + arm64)
+        working-directory: HomeAssistantCommandPalette
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          SIGNING_PFX_BASE64: ${{ secrets.SIGNING_PFX_BASE64 }}
+          SIGNING_PFX_PASSWORD: ${{ secrets.SIGNING_PFX_PASSWORD }}
+        shell: pwsh
+        run: |
+          if (-not $env:SIGNING_PFX_BASE64) {
+            Write-Error "SIGNING_PFX_BASE64 secret is not set. See docs/releasing.md for cert setup."
+            exit 1
+          }
+          .\build-msix.ps1 -Version "${{ inputs.version }}" -Platforms @('x64','arm64') -Bundle
+
+      - name: Upload MSIX artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: msix-packages
+          path: |
+            HomeAssistantCommandPalette/bin/Release/msix/*.msix
+            HomeAssistantCommandPalette/bin/Release/msix/*.msixbundle
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: v${{ inputs.version }}
+          body: ${{ inputs.release_notes }}
+          files: |
+            HomeAssistantCommandPalette/bin/Release/msix/*.msix
+            HomeAssistantCommandPalette/bin/Release/msix/*.msixbundle
+          draft: false
+          prerelease: false
