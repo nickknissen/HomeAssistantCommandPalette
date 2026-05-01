@@ -49,6 +49,12 @@ public sealed class HaSettings : JsonSettingsManager
         Placeholder = "/my-dashboard",
     };
 
+    private readonly ToggleSetting _showEntityIdSetting = new(
+        "ha-show-entity-id",
+        "Show entity IDs as subtitle",
+        "Replace the area name in the list subtitle with the raw entity_id (e.g. light.kitchen). Useful when wiring up automations.",
+        false);
+
     public HaSettings()
     {
         FilePath = SettingsJsonPath();
@@ -57,6 +63,7 @@ public sealed class HaSettings : JsonSettingsManager
         Settings.Add(_tokenSetting);
         Settings.Add(_ignoreCertSetting);
         Settings.Add(_dashboardPathSetting);
+        Settings.Add(_showEntityIdSetting);
 
         LoadSettings();
 
@@ -81,6 +88,8 @@ public sealed class HaSettings : JsonSettingsManager
             return raw.StartsWith('/') ? raw : "/" + raw;
         }
     }
+
+    public bool ShowEntityId => _showEntityIdSetting.Value;
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Url) && !string.IsNullOrWhiteSpace(Token);
 
