@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using HomeAssistantCommandPalette.Services;
 using Microsoft.CommandPalette.Extensions;
 using Microsoft.CommandPalette.Extensions.Toolkit;
@@ -12,6 +13,7 @@ internal sealed partial class CallServiceCommand : InvokableCommand
     private readonly string _service;
     private readonly string _entityId;
     private readonly string _displayName;
+    private readonly IReadOnlyDictionary<string, object?>? _extraData;
     private readonly Action? _onSuccess;
 
     public CallServiceCommand(
@@ -20,7 +22,8 @@ internal sealed partial class CallServiceCommand : InvokableCommand
         string service,
         string entityId,
         string displayName,
-        string? iconRelativePath = null,
+        IconInfo? icon = null,
+        IReadOnlyDictionary<string, object?>? extraData = null,
         Action? onSuccess = null)
     {
         _client = client;
@@ -28,22 +31,21 @@ internal sealed partial class CallServiceCommand : InvokableCommand
         _service = service;
         _entityId = entityId;
         _displayName = displayName;
+        _extraData = extraData;
         _onSuccess = onSuccess;
-        Icon = IconHelpers.FromRelativePath(iconRelativePath ?? "Assets\\Square44x44Logo.scale-200.png");
+        Icon = icon ?? Icons.App;
     }
 
     public override string Name => _displayName;
 
     public override CommandResult Invoke()
     {
-        if (_client.TryCallService(_domain, _service, _entityId, out var error))
+        if (_client.TryCallService(_domain, _service, _entityId, _extraData, out var error))
         {
+            // No success toast: the list refresh + icon/state update is the
+            // confirmation. A toast on top is noise.
             _onSuccess?.Invoke();
-            return CommandResult.ShowToast(new ToastArgs
-            {
-                Message = $"{_displayName}: {_entityId}",
-                Result = CommandResult.KeepOpen(),
-            });
+            return CommandResult.KeepOpen();
         }
 
         return CommandResult.ShowToast(new ToastArgs

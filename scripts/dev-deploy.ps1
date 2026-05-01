@@ -54,30 +54,39 @@ $MsixPath = Join-Path $ProjectDir "bin\Release\msix\HomeAssistantCommandPalette_
 Write-Host "=== dev-deploy: $Version ($Platform) ===" -ForegroundColor Green
 
 # ---------- 1. Build ----------
-Write-Host "`n[1/4] Building MSIX..." -ForegroundColor Cyan
+Write-Host "`n[1/5] Building MSIX..." -ForegroundColor Cyan
 & $BuildScript -Version $Version -Platforms $Platform
 if ($LASTEXITCODE -ne 0) { throw "build-msix.ps1 failed (exit $LASTEXITCODE)" }
 if (-not (Test-Path $MsixPath)) { throw "Expected MSIX not produced: $MsixPath" }
 
 # ---------- 2. Sign ----------
 if ($SkipSign) {
-    Write-Host "`n[2/4] Skipping signing (-SkipSign)" -ForegroundColor DarkYellow
+    Write-Host "`n[2/5] Skipping signing (-SkipSign)" -ForegroundColor DarkYellow
 } else {
-    Write-Host "`n[2/4] Signing..." -ForegroundColor Cyan
+    Write-Host "`n[2/5] Signing..." -ForegroundColor Cyan
     & $SignScript -Path $MsixPath
     if ($LASTEXITCODE -ne 0) { throw "sign-local.ps1 failed (exit $LASTEXITCODE)" }
 }
 
-# ---------- 3. Uninstall existing ----------
-Write-Host "`n[3/4] Uninstalling previous copies..." -ForegroundColor Cyan
-& $UninstallScript
+# ---------- 3. Stop CmdPal so install can replace files cleanly ----------
+# CmdPal hosts the extension via COM; if it's running, it has the .dll
+# loaded and Add-AppxPackage races with the lock. Kill the UI plus any
+# extension COM servers before reinstalling.
+Write-Host "`n[3/5] Stopping Command Palette..." -ForegroundColor Cyan
+Get-Process |
+    Where-Object { $_.ProcessName -match '^(Microsoft\.CmdPal\.UI|Microsoft\.CmdPal\.Ext\.|HomeAssistantCommandPalette)$' } |
+    Stop-Process -Force -ErrorAction SilentlyContinue
 
-# ---------- 4. Install ----------
-Write-Host "`n[4/4] Installing $MsixPath" -ForegroundColor Cyan
+# ---------- 4. Uninstall + install ----------
+Write-Host "`n[4/5] Reinstalling..." -ForegroundColor Cyan
+& $UninstallScript
 Add-AppxPackage -Path $MsixPath
 $installed = Get-AppxPackage NickNissen.HomeAssistantforCommandPalette
 if (-not $installed) { throw "Add-AppxPackage didn't register the package." }
 
+# ---------- 5. Launch Command Palette ----------
+Write-Host "`n[5/5] Launching Command Palette..." -ForegroundColor Cyan
+Start-Process 'explorer.exe' 'shell:AppsFolder\Microsoft.CommandPalette_8wekyb3d8bbwe!App'
+
 Write-Host "`n=== Deployed ===" -ForegroundColor Green
 Write-Host "  $($installed.PackageFullName)  ($($installed.SignatureKind))" -ForegroundColor Yellow
-Write-Host "`nRestart Command Palette to pick up the new build." -ForegroundColor Yellow

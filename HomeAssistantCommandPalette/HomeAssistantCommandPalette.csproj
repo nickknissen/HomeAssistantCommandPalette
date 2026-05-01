@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <Content Include="Assets\**\*.png" />
+    <Content Include="Assets\**\*.svg" />
   </ItemGroup>
 
   <Target Name="PrepareAssets" BeforeTargets="BeforeBuild">
