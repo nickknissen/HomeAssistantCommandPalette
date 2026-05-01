@@ -620,7 +620,155 @@ internal sealed partial class EntityListPage : ListPage
             return entity.IsOn ? Icons.FanOn : Icons.FanOff;
         }
 
-        return Icons.App;
+        if (entity.Domain == "switch")
+        {
+            if (unavailable) return Icons.SwitchUnavailable;
+            return entity.IsOn ? Icons.SwitchOn : Icons.SwitchOff;
+        }
+
+        if (entity.Domain == "input_boolean")
+        {
+            if (unavailable) return Icons.InputBooleanUnavailable;
+            return entity.IsOn ? Icons.InputBooleanOn : Icons.InputBooleanOff;
+        }
+
+        if (entity.Domain == "timer")
+        {
+            if (unavailable) return Icons.TimerUnavailable;
+            // Yellow when active; blue for idle / paused. Mirrors Raycast.
+            return string.Equals(entity.State, "active", System.StringComparison.OrdinalIgnoreCase)
+                ? Icons.TimerOn
+                : Icons.TimerOff;
+        }
+
+        if (entity.Domain == "script")
+        {
+            if (unavailable) return Icons.ScriptUnavailable;
+            return entity.IsOn ? Icons.ScriptOn : Icons.ScriptOff;
+        }
+
+        if (entity.Domain == "update")
+        {
+            if (unavailable) return Icons.UpdateUnavailable;
+            // state="on" means an update is available — yellow draws the eye.
+            return entity.IsOn ? Icons.UpdateOn : Icons.UpdateOff;
+        }
+
+        if (entity.Domain == "person")
+        {
+            if (unavailable) return Icons.PersonUnavailable;
+            // state is the zone the person is in. "home" → yellow; any
+            // other zone (including "not_home") → blue.
+            return string.Equals(entity.State, "home", System.StringComparison.OrdinalIgnoreCase)
+                ? Icons.PersonOn
+                : Icons.PersonOff;
+        }
+
+        if (entity.EntityId == "sun.sun")
+        {
+            if (unavailable) return Icons.SunUnavailable;
+            return string.Equals(entity.State, "below_horizon", System.StringComparison.OrdinalIgnoreCase)
+                ? Icons.SunNight
+                : Icons.SunDay;
+        }
+
+        if (entity.Domain == "scene") return unavailable ? Icons.SceneUnavailable : Icons.Scene;
+        if (entity.Domain == "zone") return unavailable ? Icons.ZoneUnavailable : Icons.Zone;
+        if (entity.Domain == "camera") return unavailable ? Icons.CameraUnavailable : Icons.Camera;
+        if (entity.Domain == "counter") return unavailable ? Icons.CounterUnavailable : Icons.Counter;
+        if (entity.Domain == "button") return unavailable ? Icons.ButtonUnavailable : Icons.Button;
+        if (entity.Domain == "weather") return unavailable ? Icons.WeatherUnavailable : Icons.Weather;
+
+        if (entity.Domain == "input_select") return Icons.InputSelect;
+        if (entity.Domain == "input_button") return Icons.InputButton;
+        if (entity.Domain == "input_number") return Icons.InputNumber;
+        if (entity.Domain == "input_text") return Icons.InputText;
+        if (entity.Domain == "input_datetime")
+        {
+            // Pick calendar / clock / both based on the entity's published
+            // has_date / has_time flags.
+            var hasDate = entity.Attributes.TryGetValue("has_date", out var hd) && hd is bool hdb && hdb;
+            var hasTime = entity.Attributes.TryGetValue("has_time", out var ht) && ht is bool htb && htb;
+            if (hasDate && !hasTime) return Icons.InputDate;
+            if (hasTime && !hasDate) return Icons.InputTime;
+            return Icons.InputDateTime;
+        }
+
+        // sensor / binary_sensor — drive the icon off device_class. binary
+        // sensors carry on/off state; numeric sensors are stateless blue.
+        if (entity.Domain is "binary_sensor" or "sensor")
+        {
+            return IconForDeviceClass(entity, unavailable);
+        }
+
+        return unavailable ? Icons.ShapeUnavailable : Icons.Shape;
+    }
+
+    private static IconInfo IconForDeviceClass(HaEntity entity, bool unavailable)
+    {
+        var dc = entity.Attributes.TryGetValue("device_class", out var raw) && raw is string s ? s : null;
+
+        // binary_sensor — yellow when "detected/open/connected", blue when
+        // clear, grey when unavailable.
+        if (entity.Domain == "binary_sensor")
+        {
+            switch (dc)
+            {
+                case "door":
+                case "garage_door":
+                    if (unavailable) return Icons.DoorUnavailable;
+                    return entity.IsOn ? Icons.DoorOpen : Icons.DoorClosed;
+                case "window":
+                case "opening":
+                    if (unavailable) return Icons.WindowUnavailable;
+                    return entity.IsOn ? Icons.WindowOpen : Icons.WindowClosed;
+                case "motion":
+                case "occupancy":
+                case "presence":
+                case "moving":
+                    if (unavailable) return Icons.MotionUnavailable;
+                    return entity.IsOn ? Icons.MotionDetected : Icons.MotionClear;
+                case "connectivity":
+                    if (unavailable) return Icons.ConnectivityUnavailable;
+                    return entity.IsOn ? Icons.ConnectivityOn : Icons.ConnectivityOff;
+                case "plug":
+                case "power":
+                    if (unavailable) return Icons.PlugUnavailable;
+                    return entity.IsOn ? Icons.PlugOn : Icons.PlugOff;
+                case "update":
+                    if (unavailable) return Icons.UpdateUnavailable;
+                    return entity.IsOn ? Icons.UpdateOn : Icons.UpdateOff;
+            }
+        }
+
+        // sensor — always-blue icons keyed off device_class. Battery uses a
+        // dedicated icon set; the rest fall through to a generic shape when
+        // the device_class is missing or unrecognized.
+        switch (dc)
+        {
+            case "battery":
+                return unavailable ? Icons.BatteryUnavailable : Icons.Battery;
+            case "temperature":
+                return unavailable ? Icons.TemperatureUnavailable : Icons.Temperature;
+            case "humidity":
+            case "moisture":
+                return unavailable ? Icons.HumidityUnavailable : Icons.Humidity;
+            case "pressure":
+            case "atmospheric_pressure":
+                return unavailable ? Icons.PressureUnavailable : Icons.Pressure;
+            case "energy":
+            case "power":
+            case "current":
+            case "voltage":
+            case "apparent_power":
+                return unavailable ? Icons.EnergyUnavailable : Icons.Energy;
+            case "power_factor":
+                return unavailable ? Icons.PowerFactorUnavailable : Icons.PowerFactor;
+            case "carbon_dioxide":
+                return unavailable ? Icons.CarbonDioxideUnavailable : Icons.CarbonDioxide;
+        }
+
+        return unavailable ? Icons.ShapeUnavailable : Icons.Shape;
     }
 
     private ICommand BuildPrimaryCommand(HaEntity entity)
