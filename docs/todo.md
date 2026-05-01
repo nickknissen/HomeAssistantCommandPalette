@@ -102,7 +102,7 @@ remaining domains live in the granular list below.
 ### Lights — additional actions to consider
 
 - [ ] RGB color picker (preset palette: red, green, blue, warm white, …)
-- [ ] Min / Max color temp Kelvin in details
+- [x] Min / Max color temp Kelvin in details (falls back to mireds pair)
 
 ### Covers — additional actions to consider
 
