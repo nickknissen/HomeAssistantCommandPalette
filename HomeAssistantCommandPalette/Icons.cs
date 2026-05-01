@@ -49,6 +49,14 @@ internal static class Icons
     public static IconInfo Thermostat => IconHelpers.FromRelativePath("Assets\\Icons\\thermostat.svg");
     public static IconInfo Fan => IconHelpers.FromRelativePath("Assets\\Icons\\fan.svg");
 
+    // Vacuum state-tinted icons. Yellow when cleaning, blue when docked /
+    // idle / paused / returning, grey when unavailable.
+    public static IconInfo VacuumCleaning => IconHelpers.FromRelativePath("Assets\\Icons\\robot-vacuum-on.svg");
+    public static IconInfo VacuumIdle => IconHelpers.FromRelativePath("Assets\\Icons\\robot-vacuum-off.svg");
+    public static IconInfo VacuumUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\robot-vacuum-unavailable.svg");
+
+    public static IconInfo Home => IconHelpers.FromRelativePath("Assets\\Icons\\home.svg");
+
     // Service-call command icons (use the unbaked SVG; CmdPal renders them
     // in the palette's foreground color via currentColor).
     public static IconInfo Toggle => IconHelpers.FromRelativePath("Assets\\Icons\\toggle-switch-outline.svg");
