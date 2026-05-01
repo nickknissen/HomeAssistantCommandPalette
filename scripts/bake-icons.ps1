@@ -37,6 +37,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $colors = @{
+    'low'          = '#FF4D4F'
     'on'           = '#FECF02'
     'off'          = '#178CFB'
     'unavailable'  = '#888888'
