@@ -122,7 +122,7 @@ remaining domains live in the granular list below.
 ### Climate — additional actions to consider
 
 - [x] Min / Max temp range row in details
-- [ ] Target low / high (heat_cool dual setpoint)
+- [x] Target low / high (heat_cool dual setpoint) details rows
 - [x] Swing mode + submenu when `swing_modes` is present
 
 ### Vacuums — additional actions to consider
