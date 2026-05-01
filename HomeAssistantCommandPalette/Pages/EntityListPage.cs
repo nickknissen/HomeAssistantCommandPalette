@@ -376,6 +376,25 @@ internal sealed partial class EntityListPage : ListPage
         {
             meta.Add(Row("Color temp", $"{k}K"));
         }
+        // Min / max Kelvin range — only when both are reported. Helps the
+        // user know the bulb's tunable-white window without round-tripping
+        // to the HA UI. Some firmwares report only the legacy mireds pair,
+        // so fall back to mireds → kelvin (k = 1_000_000 / mired).
+        var minK = entity.Attributes.TryGetValue("min_color_temp_kelvin", out var mnk) && mnk is long mnki ? mnki : 0;
+        var maxK = entity.Attributes.TryGetValue("max_color_temp_kelvin", out var mxk) && mxk is long mxki ? mxki : 0;
+        if (minK == 0 && maxK == 0
+            && entity.Attributes.TryGetValue("min_mireds", out var mnm) && mnm is long mnmi && mnmi > 0
+            && entity.Attributes.TryGetValue("max_mireds", out var mxm) && mxm is long mxmi && mxmi > 0)
+        {
+            // k = 1_000_000 / mired. Smaller mired → higher kelvin, so the
+            // mired pair swaps: min Kelvin comes from max mireds.
+            minK = 1_000_000 / mxmi;
+            maxK = 1_000_000 / mnmi;
+        }
+        if (minK > 0 && maxK > 0)
+        {
+            meta.Add(Row("Color temp range", $"{minK}K – {maxK}K"));
+        }
         if (entity.Attributes.TryGetValue("rgb_color", out var rgb) && rgb is not null)
         {
             meta.Add(Row("RGB", rgb.ToString() ?? string.Empty));
