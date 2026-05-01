@@ -460,7 +460,28 @@ public sealed partial class HaApiClient : IDisposable
             case double d: writer.WriteNumber(key, d); break;
             case float f: writer.WriteNumber(key, f); break;
             case string s: writer.WriteString(key, s); break;
+            case System.Collections.IEnumerable e:
+                writer.WritePropertyName(key);
+                writer.WriteStartArray();
+                foreach (var item in e) WriteJsonElement(writer, item);
+                writer.WriteEndArray();
+                break;
             default: writer.WriteString(key, value.ToString() ?? string.Empty); break;
+        }
+    }
+
+    private static void WriteJsonElement(Utf8JsonWriter writer, object? value)
+    {
+        switch (value)
+        {
+            case null: writer.WriteNullValue(); break;
+            case bool b: writer.WriteBooleanValue(b); break;
+            case int i: writer.WriteNumberValue(i); break;
+            case long l: writer.WriteNumberValue(l); break;
+            case double d: writer.WriteNumberValue(d); break;
+            case float f: writer.WriteNumberValue(f); break;
+            case string s: writer.WriteStringValue(s); break;
+            default: writer.WriteStringValue(value.ToString() ?? string.Empty); break;
         }
     }
 

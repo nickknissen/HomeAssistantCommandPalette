@@ -102,7 +102,9 @@ remaining domains live in the granular list below.
 
 ### Lights — additional actions to consider
 
-- [ ] RGB color picker (preset palette: red, green, blue, warm white, …)
+- [x] RGB color picker — "Set color…" submenu with a 9-colour rainbow
+      palette (Red/Orange/Yellow/Green/Cyan/Blue/Purple/Pink/White), gated
+      by `supported_color_modes` ∋ {rgb, rgbw, rgbww, hs, xy}
 - [x] Min / Max color temp Kelvin in details (falls back to mireds pair)
 
 ### Covers — additional actions to consider
