@@ -74,7 +74,9 @@ remaining domains live in the granular list below.
       in the details pane (`Details.HeroImage`); auto-refresh every 3 s
       (expose interval as a setting like Raycast's `camerarefreshinterval`;
       0 disables auto-refresh)
-- [ ] **Persons** — picture, location, last_changed-as-position-update
+- [x] **Persons** — Location (lat/lon), GPS accuracy, Source tracker
+      rows; Open in Google Maps + Copy user ID context actions
+      (picture/HeroImage deferred — needs auth-aware image fetching)
 - [ ] **Weather** — current conditions + forecast (subscribe via WS later)
 - [ ] **Helpers — per-type actions** — today the Helpers page only toggles.
       Raycast has dedicated actions per helper domain:
