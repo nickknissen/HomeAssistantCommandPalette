@@ -395,9 +395,19 @@ internal sealed partial class EntityListPage : ListPage
         {
             meta.Add(Row("Color temp range", $"{minK}K – {maxK}K"));
         }
-        if (entity.Attributes.TryGetValue("rgb_color", out var rgb) && rgb is not null)
+        // HA reports `rgb_color` as a 3-element list of ints (sometimes
+        // longs after JSON deserialization). Stringify each component so
+        // we don't end up rendering the .NET list's type name.
+        if (entity.Attributes.TryGetValue("rgb_color", out var rgb) && rgb is List<object?> rgbList && rgbList.Count == 3)
         {
-            meta.Add(Row("RGB", rgb.ToString() ?? string.Empty));
+            var parts = rgbList.Select(c => c switch
+            {
+                long l => l.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                int i => i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                double d => ((int)System.Math.Round(d)).ToString(System.Globalization.CultureInfo.InvariantCulture),
+                _ => c?.ToString() ?? "?",
+            });
+            meta.Add(Row("RGB", string.Join(", ", parts)));
         }
         if (entity.Attributes.TryGetValue("color_mode", out var mode) && mode is string m && !string.IsNullOrEmpty(m))
         {
