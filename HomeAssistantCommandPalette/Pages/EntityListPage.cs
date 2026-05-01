@@ -564,6 +564,33 @@ internal sealed partial class EntityListPage : ListPage
             var v = area switch { long l => $"{l} m²", double d => $"{d} m²", _ => null };
             if (v is not null) meta.Add(Row("Cleaned", v));
         }
+        // `cleaning_time` is integration-specific: most expose minutes as
+        // an int, a few expose a pre-formatted "HH:MM:SS" string. Pass
+        // strings through untouched and format ints as Hh Mm assuming
+        // minutes (matches the frontend's default rendering).
+        if (entity.Attributes.TryGetValue("cleaning_time", out var ct))
+        {
+            var v = ct switch
+            {
+                string s when !string.IsNullOrEmpty(s) => s,
+                long l => FormatMinutes(l),
+                double d => FormatMinutes((long)d),
+                _ => null,
+            };
+            if (v is not null) meta.Add(Row("Cleaning time", v));
+        }
+        if (entity.Attributes.TryGetValue("error", out var err) && err is string errs && !string.IsNullOrEmpty(errs))
+        {
+            meta.Add(Row("Last error", errs));
+        }
+    }
+
+    private static string FormatMinutes(long minutes)
+    {
+        if (minutes < 60) return $"{minutes}m";
+        var h = minutes / 60;
+        var m = minutes % 60;
+        return m == 0 ? $"{h}h" : $"{h}h {m}m";
     }
 
     private static void AddClimateRows(HaEntity entity, List<IDetailsElement> meta)
