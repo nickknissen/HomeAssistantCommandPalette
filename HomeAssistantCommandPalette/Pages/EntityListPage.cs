@@ -1052,6 +1052,34 @@ internal sealed partial class EntityListPage : ListPage
             extraData: new Dictionary<string, object?> { ["brightness_pct"] = pct },
             onSuccess: OnServiceCallSucceeded));
 
+    // Preset palette for the light "Set color…" submenu. RGB triplets are
+    // pure primaries / secondaries so each option behaves the same on every
+    // RGB-capable bulb regardless of its colour-mode (rgb / rgbw / hs / xy
+    // — HA converts internally). Order mirrors a standard rainbow + white.
+    private static readonly (string Name, int[] Rgb)[] ColorPalette =
+    [
+        ("Red",    new[] { 255,   0,   0 }),
+        ("Orange", new[] { 255, 128,   0 }),
+        ("Yellow", new[] { 255, 255,   0 }),
+        ("Green",  new[] {   0, 255,   0 }),
+        ("Cyan",   new[] {   0, 255, 255 }),
+        ("Blue",   new[] {   0,   0, 255 }),
+        ("Purple", new[] { 128,   0, 255 }),
+        ("Pink",   new[] { 255,   0, 128 }),
+        ("White",  new[] { 255, 255, 255 }),
+    ];
+
+    private CommandContextItem ColorPreset(HaEntity entity, string name, int[] rgb) =>
+        new(new CallServiceCommand(
+            _client,
+            domain: "light",
+            service: "turn_on",
+            entityId: entity.EntityId,
+            displayName: name,
+            icon: Icons.Brightness,
+            extraData: new Dictionary<string, object?> { ["rgb_color"] = rgb },
+            onSuccess: OnServiceCallSucceeded));
+
     private CommandContextItem CoverPositionPreset(HaEntity entity, int position) =>
         new(new CallServiceCommand(
             _client,
@@ -1201,6 +1229,27 @@ internal sealed partial class EntityListPage : ListPage
                 Icon = Icons.Brightness,
                 MoreCommands = presets,
             });
+
+            // RGB color picker — only when the bulb declares an RGB-capable
+            // colour mode. HA exposes capability via `supported_color_modes`
+            // (a list of strings). Modes that accept rgb_color: rgb, rgbw,
+            // rgbww, hs, xy. If the attribute is missing, skip the menu —
+            // older single-channel bulbs would error on rgb_color.
+            if (entity.Attributes.TryGetValue("supported_color_modes", out var modes)
+                && modes is List<object?> modeList
+                && modeList.OfType<string>().Any(m =>
+                    m is "rgb" or "rgbw" or "rgbww" or "hs" or "xy"))
+            {
+                var colorItems = ColorPalette
+                    .Select(c => (IContextItem)ColorPreset(entity, c.Name, c.Rgb))
+                    .ToArray();
+                items.Add(new CommandContextItem(new NoOpCommand())
+                {
+                    Title = "Set color…",
+                    Icon = Icons.Brightness,
+                    MoreCommands = colorItems,
+                });
+            }
         }
 
         if (entity.Domain == "fan")
