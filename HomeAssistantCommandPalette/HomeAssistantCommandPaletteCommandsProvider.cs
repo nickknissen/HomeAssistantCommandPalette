@@ -102,7 +102,7 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
         {
             Title = "Calendar",
             Subtitle = "Home Assistant",
-            Icon = Icons.InputDate,
+            Icon = Icons.App,
         });
 
         commands.Add(new CommandItem(new ConnectionCheckPage(_settings, _apiClient))

@@ -28,7 +28,7 @@ internal sealed partial class CalendarPage : ListPage
     {
         _settings = settings;
         _client = client;
-        Icon = Icons.InputDate;
+        Icon = Icons.App;
         Title = "Calendar";
         Name = "Open";
         Id = "ha.calendar";
@@ -91,9 +91,6 @@ internal sealed partial class CalendarPage : ListPage
 
     private static ListItem BuildItem(HaCalendarEvent ev)
     {
-        var now = DateTimeOffset.Now;
-        var subtitle = $"{ev.CalendarName} · {FormatWhen(ev, now)}";
-
         var details = new List<IDetailsElement>
         {
             Row("Calendar", ev.CalendarName),
@@ -105,28 +102,58 @@ internal sealed partial class CalendarPage : ListPage
 
         return new ListItem(new CopyTextCommand(ev.Summary) { Name = "Copy event title" })
         {
-            Title = ev.Summary,
-            Subtitle = subtitle,
-            Icon = Icons.InputDate,
+            // Raycast-style "<from> - <to> | <title>" so the time range is
+            // the first thing the eye lands on. Day label moves to subtitle
+            // (we don't have List sections to group by day yet).
+            Title = $"{FormatTimeRange(ev)} | {ev.Summary}",
+            Subtitle = FormatDayLabel(ev.Start),
+            Icon = Icons.App,
+            Tags = [new Tag(ev.CalendarName) { ToolTip = "Calendar" }],
             Details = new Details { Title = ev.Summary, Metadata = details.ToArray() },
         };
     }
 
-    // Compact "when" — lean on relative phrasing for near-term events
-    // (Today / Tomorrow), drop down to weekday + clock for events later
-    // this week, and use a fully-qualified date for anything beyond.
-    private static string FormatWhen(HaCalendarEvent ev, DateTimeOffset now)
+    /// <summary>
+    /// "All Day" / "10:00 - 11:00" / "10:00 - Tue 09:00" — the time-range
+    /// piece that prefixes the event title. Mirrors Raycast's
+    /// humanEventTimeRange but drops down to a date prefix on the end side
+    /// when the event crosses days, instead of falling back to raw ISO.
+    /// </summary>
+    private static string FormatTimeRange(HaCalendarEvent ev)
     {
-        var local = ev.Start.ToLocalTime();
+        if (ev.AllDay) return "All Day";
+
+        var startLocal = ev.Start.ToLocalTime();
+        var endLocal = ev.End.ToLocalTime();
+        var startTime = startLocal.ToString("HH:mm", CultureInfo.InvariantCulture);
+        var endTime = endLocal.ToString("HH:mm", CultureInfo.InvariantCulture);
+
+        if (startLocal.Date == endLocal.Date)
+        {
+            return $"{startTime} - {endTime}";
+        }
+        // Cross-day: prefix the end with its day so the range stays readable.
+        return $"{startTime} - {FormatShortDay(endLocal)} {endTime}";
+    }
+
+    private static string FormatDayLabel(DateTimeOffset start)
+    {
+        var local = start.ToLocalTime();
         var today = DateTime.Today;
         var date = local.Date;
-        var dayLabel = date == today ? "Today"
+        return date == today ? "Today"
             : date == today.AddDays(1) ? "Tomorrow"
             : date < today.AddDays(7) ? local.ToString("dddd", CultureInfo.CurrentCulture)
             : local.ToString("ddd, MMM d", CultureInfo.CurrentCulture);
+    }
 
-        if (ev.AllDay) return $"{dayLabel} · all-day";
-        return $"{dayLabel} · {local.ToString("t", CultureInfo.CurrentCulture)}";
+    private static string FormatShortDay(DateTimeOffset ts)
+    {
+        var local = ts.LocalDateTime;
+        var today = DateTime.Today;
+        if (local.Date == today) return "Today";
+        if (local.Date == today.AddDays(1)) return "Tomorrow";
+        return local.ToString("ddd", CultureInfo.CurrentCulture);
     }
 
     private static string FormatTimestamp(DateTimeOffset ts, bool allDay)
@@ -134,7 +161,7 @@ internal sealed partial class CalendarPage : ListPage
         var local = ts.ToLocalTime();
         return allDay
             ? local.ToString("dddd, MMM d", CultureInfo.CurrentCulture)
-            : local.ToString("dddd, MMM d · t", CultureInfo.CurrentCulture);
+            : local.ToString("dddd, MMM d · HH:mm", CultureInfo.CurrentCulture);
     }
 
     private static DetailsElement Row(string key, string value) => new()
