@@ -670,6 +670,13 @@ internal sealed partial class EntityListPage : ListPage
         {
             meta.Add(Row("Tilt", $"{t}%"));
         }
+        // `working` is true while the cover is actively moving — distinct
+        // from `state == opening|closing` because some integrations report
+        // it independently of the discrete state machine.
+        if (entity.Attributes.TryGetValue("working", out var working) && working is bool wb)
+        {
+            meta.Add(Row("Working", wb ? "yes" : "no"));
+        }
         if (entity.Attributes.TryGetValue("device_class", out var dc) && dc is string dcs && !string.IsNullOrEmpty(dcs))
         {
             meta.Add(Row("Device class", dcs));
@@ -958,6 +965,17 @@ internal sealed partial class EntityListPage : ListPage
             displayName: $"{position}%",
             icon: position == 0 ? Icons.Close : (position == 100 ? Icons.Open : Icons.Stop),
             extraData: new Dictionary<string, object?> { ["position"] = position },
+            onSuccess: OnServiceCallSucceeded));
+
+    private CommandContextItem CoverTiltPreset(HaEntity entity, int position) =>
+        new(new CallServiceCommand(
+            _client,
+            domain: "cover",
+            service: "set_cover_tilt_position",
+            entityId: entity.EntityId,
+            displayName: $"{position}%",
+            icon: position == 0 ? Icons.Close : (position == 100 ? Icons.Open : Icons.Stop),
+            extraData: new Dictionary<string, object?> { ["tilt_position"] = position },
             onSuccess: OnServiceCallSucceeded));
 
     private CommandContextItem VolumePreset(HaEntity entity, int pct) =>
@@ -1447,10 +1465,14 @@ internal sealed partial class EntityListPage : ListPage
             items.Add(new CommandContextItem(
                 new CallServiceCommand(_client, "cover", "stop_cover", entity.EntityId, $"Stop {entity.FriendlyName}", icon: Icons.Stop, onSuccess: OnServiceCallSucceeded)));
 
-            // Position presets only when the cover supports set_cover_position
-            // (HA exposes this via the supported_features bitmask; bit 2 = 4
-            // means SET_POSITION). Falls back to skipping the menu silently.
-            if (entity.Attributes.TryGetValue("supported_features", out var sf) && sf is long bits && (bits & 4) == 4)
+            // Cover supported_features bits (HA CoverEntityFeature):
+            //   1 OPEN, 2 CLOSE, 4 SET_POSITION, 8 STOP, 16 OPEN_TILT,
+            //   32 CLOSE_TILT, 64 STOP_TILT, 128 SET_TILT_POSITION.
+            var coverSf = entity.Attributes.TryGetValue("supported_features", out var sf) && sf is long bits ? bits : -1;
+            bool CoverHas(long bit) => coverSf < 0 || (coverSf & bit) == bit;
+
+            // Position presets only when the cover supports set_cover_position.
+            if (CoverHas(4))
             {
                 var presets = new IContextItem[]
                 {
@@ -1463,6 +1485,25 @@ internal sealed partial class EntityListPage : ListPage
                 items.Add(new CommandContextItem(new NoOpCommand())
                 {
                     Title = "Set position…",
+                    Icon = Icons.Stop,
+                    MoreCommands = presets,
+                });
+            }
+
+            // Tilt position presets when the cover supports set_cover_tilt_position.
+            if (CoverHas(128))
+            {
+                var presets = new IContextItem[]
+                {
+                    CoverTiltPreset(entity, 0),
+                    CoverTiltPreset(entity, 25),
+                    CoverTiltPreset(entity, 50),
+                    CoverTiltPreset(entity, 75),
+                    CoverTiltPreset(entity, 100),
+                };
+                items.Add(new CommandContextItem(new NoOpCommand())
+                {
+                    Title = "Set tilt…",
                     Icon = Icons.Stop,
                     MoreCommands = presets,
                 });

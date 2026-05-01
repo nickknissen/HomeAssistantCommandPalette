@@ -106,8 +106,8 @@ remaining domains live in the granular list below.
 
 ### Covers — additional actions to consider
 
-- [ ] Tilt position presets when `current_tilt_position` is present
-- [ ] `working` (currently moving) flag in details
+- [x] Tilt position presets (gated by SET_TILT_POSITION bit)
+- [x] `working` (currently moving) flag in details
 
 ### Media players — additional actions to consider
 
