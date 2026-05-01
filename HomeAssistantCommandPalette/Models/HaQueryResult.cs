@@ -39,3 +39,16 @@ public sealed record HaConfigProbe(
     string? TimeZone,
     string? State,
     long LatencyMs);
+
+/// <summary>
+/// Result of <c>POST /api/conversation/process</c>. <see cref="Success"/>
+/// reflects HA's <c>response_type</c> — "error" maps to false; anything
+/// else (including "action_done" and "query_answer") is success.
+/// <see cref="Speech"/> is the human-readable answer / status message;
+/// <see cref="Error"/> carries the error message when Success is false.
+/// </summary>
+public sealed record HaAssistResult(
+    bool Success,
+    string Speech,
+    string? ResponseType,
+    string? Error);

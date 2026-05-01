@@ -498,6 +498,96 @@ public sealed partial class HaApiClient : IDisposable
     }
 
     /// <summary>
+    /// Sends <paramref name="text"/> to <c>POST /api/conversation/process</c>
+    /// and returns Assist's response. HA defaults the language to the
+    /// instance's configured default when omitted, so no language hint is
+    /// sent. Failures return a result with <c>Success=false</c> rather
+    /// than throwing — the caller renders Error inline as a list row.
+    /// </summary>
+    public HaAssistResult AskAssist(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return new HaAssistResult(false, string.Empty, null, "Question is empty.");
+        }
+        if (!_settings.IsConfigured)
+        {
+            return new HaAssistResult(false, string.Empty, null, "Home Assistant is not configured.");
+        }
+
+        try
+        {
+            var client = GetClient();
+            using var content = BuildAssistPayload(text);
+            using var cts = new CancellationTokenSource(DefaultTimeout);
+            var response = client.PostAsync($"{_settings.Url}/api/conversation/process", content, cts.Token).GetAwaiter().GetResult();
+
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                return new HaAssistResult(false, string.Empty, null, "Token rejected (401).");
+            }
+            if (!response.IsSuccessStatusCode)
+            {
+                return new HaAssistResult(false, string.Empty, null, $"HA returned {(int)response.StatusCode} {response.ReasonPhrase}");
+            }
+
+            var json = response.Content.ReadAsStringAsync(cts.Token).GetAwaiter().GetResult();
+            return ParseAssistResponse(json);
+        }
+        catch (Exception ex)
+        {
+            return new HaAssistResult(false, string.Empty, null, ex.Message);
+        }
+    }
+
+    private static ByteArrayContent BuildAssistPayload(string text)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("text", text);
+            writer.WriteEndObject();
+        }
+        var bytes = stream.ToArray();
+        var payload = new ByteArrayContent(bytes);
+        payload.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+        return payload;
+    }
+
+    private static HaAssistResult ParseAssistResponse(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("response", out var resp))
+        {
+            return new HaAssistResult(false, string.Empty, null, "Unexpected response shape.");
+        }
+
+        string? responseType = resp.TryGetProperty("response_type", out var rt) && rt.ValueKind == JsonValueKind.String
+            ? rt.GetString()
+            : null;
+
+        var speech = string.Empty;
+        if (resp.TryGetProperty("speech", out var sp)
+            && sp.ValueKind == JsonValueKind.Object
+            && sp.TryGetProperty("plain", out var plain)
+            && plain.ValueKind == JsonValueKind.Object
+            && plain.TryGetProperty("speech", out var speechProp)
+            && speechProp.ValueKind == JsonValueKind.String)
+        {
+            speech = speechProp.GetString() ?? string.Empty;
+        }
+
+        var isError = string.Equals(responseType, "error", StringComparison.OrdinalIgnoreCase);
+        return new HaAssistResult(
+            Success: !isError,
+            Speech: speech,
+            ResponseType: responseType,
+            Error: isError ? (string.IsNullOrEmpty(speech) ? "Assist returned an error." : speech) : null);
+    }
+
+    /// <summary>
     /// Pings <c>GET /api/config</c> and reports HA's reported version,
     /// location, time zone, run state and round-trip latency. Used by the
     /// Connection Check diagnostic page; intentionally avoids the state
