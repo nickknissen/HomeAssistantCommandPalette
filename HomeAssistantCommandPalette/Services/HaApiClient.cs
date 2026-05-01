@@ -414,8 +414,21 @@ public sealed partial class HaApiClient : IDisposable
         JsonValueKind.True => true,
         JsonValueKind.False => false,
         JsonValueKind.Null => null,
+        JsonValueKind.Array => ParseJsonArray(el),
         _ => el.GetRawText(),
     };
+
+    // Recursive — preserves typed values inside arrays (esp. string[]
+    // for things like hvac_modes / fan_modes).
+    private static List<object?> ParseJsonArray(JsonElement el)
+    {
+        var items = new List<object?>(el.GetArrayLength());
+        foreach (var item in el.EnumerateArray())
+        {
+            items.Add(ToObject(item));
+        }
+        return items;
+    }
 
     private HttpClient GetClient()
     {

@@ -124,6 +124,10 @@ internal sealed partial class EntityListPage : ListPage
         {
             AddMediaPlayerRows(entity, meta);
         }
+        else if (entity.Domain == "climate")
+        {
+            AddClimateRows(entity, meta);
+        }
 
         if (!string.IsNullOrEmpty(entity.AreaName))
         {
@@ -160,6 +164,37 @@ internal sealed partial class EntityListPage : ListPage
         if (entity.Attributes.TryGetValue("effect", out var fx) && fx is string fxs && !string.IsNullOrEmpty(fxs) && !string.Equals(fxs, "none", System.StringComparison.OrdinalIgnoreCase))
         {
             meta.Add(Row("Effect", fxs));
+        }
+    }
+
+    private static void AddClimateRows(HaEntity entity, List<IDetailsElement> meta)
+    {
+        if (entity.Attributes.TryGetValue("current_temperature", out var ct))
+        {
+            var v = ct switch { double d => $"{d}°", long l => $"{l}°", _ => null };
+            if (v is not null) meta.Add(Row("Current temp", v));
+        }
+        if (entity.Attributes.TryGetValue("temperature", out var tt))
+        {
+            var v = tt switch { double d => $"{d}°", long l => $"{l}°", _ => null };
+            if (v is not null) meta.Add(Row("Target temp", v));
+        }
+        if (entity.Attributes.TryGetValue("current_humidity", out var ch))
+        {
+            var v = ch switch { double d => $"{(int)d}%", long l => $"{l}%", _ => null };
+            if (v is not null) meta.Add(Row("Humidity", v));
+        }
+        if (entity.Attributes.TryGetValue("hvac_action", out var ha) && ha is string has && !string.IsNullOrEmpty(has))
+        {
+            meta.Add(Row("Action", has));
+        }
+        if (entity.Attributes.TryGetValue("fan_mode", out var fm) && fm is string fms && !string.IsNullOrEmpty(fms))
+        {
+            meta.Add(Row("Fan", fms));
+        }
+        if (entity.Attributes.TryGetValue("preset_mode", out var pm) && pm is string pms && !string.IsNullOrEmpty(pms))
+        {
+            meta.Add(Row("Preset", pms));
         }
     }
 
@@ -259,6 +294,17 @@ internal sealed partial class EntityListPage : ListPage
                 : Icons.MediaPlayerIdle;
         }
 
+        if (entity.Domain == "climate")
+        {
+            if (unavailable) return Icons.ClimateUnavailable;
+            return entity.State.ToLowerInvariant() switch
+            {
+                "off" => Icons.ClimateOff,
+                "auto" or "heat_cool" => Icons.ClimateAuto,
+                _ => Icons.ClimateActive, // heat / cool / dry / fan_only
+            };
+        }
+
         return Icons.App;
     }
 
@@ -313,6 +359,59 @@ internal sealed partial class EntityListPage : ListPage
             // volume_level wants 0.0..1.0 — convert from percentage.
             extraData: new Dictionary<string, object?> { ["volume_level"] = pct / 100.0 },
             onSuccess: OnServiceCallSucceeded));
+
+    private CommandContextItem TemperaturePreset(HaEntity entity, double temp) =>
+        new(new CallServiceCommand(
+            _client,
+            domain: "climate",
+            service: "set_temperature",
+            entityId: entity.EntityId,
+            displayName: $"{temp}°",
+            icon: Icons.Thermometer,
+            extraData: new Dictionary<string, object?> { ["temperature"] = temp },
+            onSuccess: OnServiceCallSucceeded));
+
+    private CommandContextItem ClimateModeItem(HaEntity entity, string mode) =>
+        new(new CallServiceCommand(
+            _client,
+            domain: "climate",
+            service: "set_hvac_mode",
+            entityId: entity.EntityId,
+            displayName: mode,
+            extraData: new Dictionary<string, object?> { ["hvac_mode"] = mode },
+            onSuccess: OnServiceCallSucceeded));
+
+    private CommandContextItem FanModeItem(HaEntity entity, string mode) =>
+        new(new CallServiceCommand(
+            _client,
+            domain: "climate",
+            service: "set_fan_mode",
+            entityId: entity.EntityId,
+            displayName: mode,
+            extraData: new Dictionary<string, object?> { ["fan_mode"] = mode },
+            onSuccess: OnServiceCallSucceeded));
+
+    private static double GetCurrentTargetTemp(HaEntity entity)
+    {
+        if (!entity.Attributes.TryGetValue("temperature", out var t)) return double.NaN;
+        return t switch
+        {
+            double d => d,
+            long l => l,
+            _ => double.NaN,
+        };
+    }
+
+    private static double GetTempStep(HaEntity entity)
+    {
+        if (!entity.Attributes.TryGetValue("target_temp_step", out var s)) return 0.5;
+        return s switch
+        {
+            double d => d,
+            long l => l,
+            _ => 0.5,
+        };
+    }
 
     private IContextItem[] BuildContextCommands(HaEntity entity)
     {
@@ -399,6 +498,82 @@ internal sealed partial class EntityListPage : ListPage
                     Icon = Icons.Volume,
                     MoreCommands = presets,
                 });
+            }
+        }
+
+        if (entity.Domain == "climate")
+        {
+            // Target temperature ± buttons (clamped to min/max if HA reports them).
+            var current = GetCurrentTargetTemp(entity);
+            var step = GetTempStep(entity);
+            if (!double.IsNaN(current))
+            {
+                var increased = System.Math.Round(current + step, 1);
+                var decreased = System.Math.Round(current - step, 1);
+                items.Add(new CommandContextItem(
+                    new CallServiceCommand(_client, "climate", "set_temperature", entity.EntityId,
+                        $"Increase to {increased}°", icon: Icons.Thermometer,
+                        extraData: new Dictionary<string, object?> { ["temperature"] = increased },
+                        onSuccess: OnServiceCallSucceeded)));
+                items.Add(new CommandContextItem(
+                    new CallServiceCommand(_client, "climate", "set_temperature", entity.EntityId,
+                        $"Decrease to {decreased}°", icon: Icons.Thermometer,
+                        extraData: new Dictionary<string, object?> { ["temperature"] = decreased },
+                        onSuccess: OnServiceCallSucceeded)));
+            }
+
+            // Common temperature presets — handy when the climate isn't
+            // currently running (no current target to ±-step from).
+            var tempPresets = new IContextItem[]
+            {
+                TemperaturePreset(entity, 18),
+                TemperaturePreset(entity, 20),
+                TemperaturePreset(entity, 21),
+                TemperaturePreset(entity, 22),
+                TemperaturePreset(entity, 24),
+            };
+            items.Add(new CommandContextItem(new NoOpCommand())
+            {
+                Title = "Set temperature…",
+                Icon = Icons.Thermometer,
+                MoreCommands = tempPresets,
+            });
+
+            // HVAC mode submenu — surface every supported mode reported by
+            // the entity (off/heat/cool/heat_cool/auto/dry/fan_only).
+            if (entity.Attributes.TryGetValue("hvac_modes", out var hvm) && hvm is List<object?> modes)
+            {
+                var modeItems = modes
+                    .OfType<string>()
+                    .Select(m => (IContextItem)ClimateModeItem(entity, m))
+                    .ToArray();
+                if (modeItems.Length > 0)
+                {
+                    items.Add(new CommandContextItem(new NoOpCommand())
+                    {
+                        Title = "Set HVAC mode…",
+                        Icon = Icons.Thermostat,
+                        MoreCommands = modeItems,
+                    });
+                }
+            }
+
+            // Fan mode submenu — same pattern, using fan_modes attribute.
+            if (entity.Attributes.TryGetValue("fan_modes", out var fm) && fm is List<object?> fanModes)
+            {
+                var modeItems = fanModes
+                    .OfType<string>()
+                    .Select(m => (IContextItem)FanModeItem(entity, m))
+                    .ToArray();
+                if (modeItems.Length > 0)
+                {
+                    items.Add(new CommandContextItem(new NoOpCommand())
+                    {
+                        Title = "Set fan mode…",
+                        Icon = Icons.Fan,
+                        MoreCommands = modeItems,
+                    });
+                }
             }
         }
 
