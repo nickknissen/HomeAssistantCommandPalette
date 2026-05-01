@@ -127,8 +127,9 @@ remaining domains live in the granular list below.
 
 ### Vacuums — additional actions to consider
 
-- [ ] Cleaning time formatted as duration in details
-- [ ] Last error message in details
+- [x] Cleaning time formatted as duration in details (handles int minutes
+      and pre-formatted strings)
+- [x] Last error message in details (`error` attribute)
 
 ### New filtered top-level pages (Raycast parity)
 
