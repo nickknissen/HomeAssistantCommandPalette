@@ -114,16 +114,16 @@ remaining domains live in the granular list below.
 - [ ] Position / Duration formatted `MM:SS / MM:SS` (parse
       `media_position` + `media_position_updated_at` to advance position
       client-side)
-- [ ] Shuffle on/off
-- [ ] Repeat (off / one / all)
-- [ ] Sound mode + sound mode submenu when `sound_mode_list` is present
-- [ ] Source select submenu from `source_list`
+- [x] Shuffle on/off (gated by SHUFFLE_SET, label flips with current `shuffle`)
+- [x] Repeat (off / one / all) (gated by REPEAT_SET)
+- [x] Sound mode + sound mode submenu when `sound_mode_list` is present
+- [x] Source select submenu from `source_list`
 
 ### Climate — additional actions to consider
 
-- [ ] Min / Max temp range row in details
+- [x] Min / Max temp range row in details
 - [ ] Target low / high (heat_cool dual setpoint)
-- [ ] Swing mode + submenu when `swing_modes` is present
+- [x] Swing mode + submenu when `swing_modes` is present
 
 ### Vacuums — additional actions to consider
 
@@ -171,7 +171,7 @@ APIs.
       pick service → fill in JSON data → call). Useful for power users.
       Equivalent to Raycast's `services` browse-mode command. (The separate
       Raycast `runService` deeplink is listed under Out of scope below.)
-- [ ] **Show Entity IDs setting** — toggle that swaps the friendly-name
+- [x] **Show Entity IDs setting** — toggle that swaps the friendly-name
       subtitle for the raw `entity_id` (mirrors Raycast's `showEntityId`).
       Useful for power users wiring up automations.
 - [ ] **Multi-instance support** — one default instance plus alternates,
