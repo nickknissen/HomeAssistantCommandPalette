@@ -22,10 +22,22 @@ internal static class Icons
     public static IconInfo LightGroupOff => IconHelpers.FromRelativePath("Assets\\Icons\\lightbulb-group-off.svg");
     public static IconInfo LightGroupUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\lightbulb-group-unavailable.svg");
 
+    // Cover state-tinted icons: window-open / window-closed / arrow-up /
+    // arrow-down. Raycast tints all cover state icons with PrimaryIconColor
+    // (blue) — only unavailable is grey.
+    public static IconInfo CoverOpen => IconHelpers.FromRelativePath("Assets\\Icons\\window-open-off.svg");
+    public static IconInfo CoverClosed => IconHelpers.FromRelativePath("Assets\\Icons\\window-closed-off.svg");
+    public static IconInfo CoverOpening => IconHelpers.FromRelativePath("Assets\\Icons\\arrow-up-box-off.svg");
+    public static IconInfo CoverClosing => IconHelpers.FromRelativePath("Assets\\Icons\\arrow-down-box-off.svg");
+    public static IconInfo CoverUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\window-closed-unavailable.svg");
+
     // Service-call command icons (use the unbaked SVG; CmdPal renders them
     // in the palette's foreground color via currentColor).
     public static IconInfo Toggle => IconHelpers.FromRelativePath("Assets\\Icons\\toggle-switch-outline.svg");
     public static IconInfo TurnOn => IconHelpers.FromRelativePath("Assets\\Icons\\power-on.svg");
     public static IconInfo TurnOff => IconHelpers.FromRelativePath("Assets\\Icons\\power-off.svg");
     public static IconInfo Brightness => IconHelpers.FromRelativePath("Assets\\Icons\\lightbulb.svg");
+    public static IconInfo Open => IconHelpers.FromRelativePath("Assets\\Icons\\arrow-up-box.svg");
+    public static IconInfo Close => IconHelpers.FromRelativePath("Assets\\Icons\\arrow-down-box.svg");
+    public static IconInfo Stop => IconHelpers.FromRelativePath("Assets\\Icons\\stop.svg");
 }
