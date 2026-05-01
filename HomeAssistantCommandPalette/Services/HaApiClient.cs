@@ -57,13 +57,20 @@ public sealed partial class HaApiClient : IDisposable
     // the next CmdPal restart.
     private static readonly TimeSpan EntityPictureTtl = TimeSpan.FromMinutes(15);
 
-    // Single Jinja template that returns a JSON object mapping each
-    // entity_id to its area name. HA's `area_name(entity_id)` walks
-    // entity → device → area in the registry, matching the resolution
-    // Raycast does over WebSocket. Dict comprehension + tojson is the
-    // cleanest variant: no commas to manage, and the output is real JSON.
+    // Jinja template that returns a JSON array of [entity_id, area_name]
+    // pairs. HA's `area_name(entity_id)` walks entity → device → area in
+    // the registry, matching the resolution Raycast does over WebSocket.
+    //
+    // Dict / list comprehensions look natural here but HA's sandboxed
+    // Jinja parser rejects them with "expected token ',', got 'for'".
+    // Build the list explicitly via a namespace accumulator instead.
     private const string AreaMapTemplate =
-        "{{ {s.entity_id: area_name(s.entity_id) for s in states if area_name(s.entity_id)} | tojson }}";
+        "{% set ns = namespace(items=[]) %}" +
+        "{% for s in states %}" +
+        "{% set a = area_name(s.entity_id) %}" +
+        "{% if a %}{% set ns.items = ns.items + [[s.entity_id, a]] %}{% endif %}" +
+        "{% endfor %}" +
+        "{{ ns.items | tojson }}";
 
     /// <summary>
     /// Diagnostic for the most recent area map fetch:
@@ -578,18 +585,23 @@ public sealed partial class HaApiClient : IDisposable
         }
 
         var map = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (string.IsNullOrWhiteSpace(trimmed) || trimmed == "{ }" || trimmed == "{}") return map;
+        if (string.IsNullOrWhiteSpace(trimmed) || trimmed == "[]" || trimmed == "[ ]") return map;
 
         try
         {
             using var doc = JsonDocument.Parse(trimmed);
-            if (doc.RootElement.ValueKind != JsonValueKind.Object) return map;
-            foreach (var prop in doc.RootElement.EnumerateObject())
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return map;
+            foreach (var pair in doc.RootElement.EnumerateArray())
             {
-                if (prop.Value.ValueKind == JsonValueKind.String)
+                if (pair.ValueKind != JsonValueKind.Array || pair.GetArrayLength() < 2) continue;
+                var idEl = pair[0];
+                var areaEl = pair[1];
+                if (idEl.ValueKind != JsonValueKind.String || areaEl.ValueKind != JsonValueKind.String) continue;
+                var id = idEl.GetString();
+                var area = areaEl.GetString();
+                if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(area))
                 {
-                    var area = prop.Value.GetString();
-                    if (!string.IsNullOrEmpty(area)) map[prop.Name] = area;
+                    map[id] = area;
                 }
             }
         }
