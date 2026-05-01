@@ -37,6 +37,18 @@ internal static class Icons
     public static IconInfo MediaPlayerIdle => IconHelpers.FromRelativePath("Assets\\Icons\\cast-connected-off.svg");
     public static IconInfo MediaPlayerUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\cast-connected-unavailable.svg");
 
+    // Climate state-tinted icons. Yellow when actively heating/cooling,
+    // blue when off, grey when unavailable. Auto/heat_cool gets the
+    // dedicated thermostat-auto glyph.
+    public static IconInfo ClimateActive => IconHelpers.FromRelativePath("Assets\\Icons\\thermostat-on.svg");
+    public static IconInfo ClimateOff => IconHelpers.FromRelativePath("Assets\\Icons\\thermostat-off.svg");
+    public static IconInfo ClimateAuto => IconHelpers.FromRelativePath("Assets\\Icons\\thermostat-auto-on.svg");
+    public static IconInfo ClimateUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\thermostat-unavailable.svg");
+
+    public static IconInfo Thermometer => IconHelpers.FromRelativePath("Assets\\Icons\\thermometer.svg");
+    public static IconInfo Thermostat => IconHelpers.FromRelativePath("Assets\\Icons\\thermostat.svg");
+    public static IconInfo Fan => IconHelpers.FromRelativePath("Assets\\Icons\\fan.svg");
+
     // Service-call command icons (use the unbaked SVG; CmdPal renders them
     // in the palette's foreground color via currentColor).
     public static IconInfo Toggle => IconHelpers.FromRelativePath("Assets\\Icons\\toggle-switch-outline.svg");
