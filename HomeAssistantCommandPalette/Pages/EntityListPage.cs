@@ -36,7 +36,7 @@ internal sealed partial class EntityListPage : ListPage
         Title = title;
         Name = "Open";
         Id = id;
-        ShowDetails = false;
+        ShowDetails = true;
         PlaceholderText = $"Search {title.ToLowerInvariant()}";
     }
 
@@ -101,29 +101,116 @@ internal sealed partial class EntityListPage : ListPage
             Tags = BuildTags(entity),
             Icon = IconForEntity(entity),
             MoreCommands = BuildContextCommands(entity),
+            Details = BuildDetails(entity),
         };
     }
 
+    private static Details BuildDetails(HaEntity entity)
+    {
+        var meta = new List<IDetailsElement>
+        {
+            Row("State", entity.State),
+        };
+
+        if (entity.Domain == "light")
+        {
+            AddLightRows(entity, meta);
+        }
+        else if (entity.Domain == "cover")
+        {
+            AddCoverRows(entity, meta);
+        }
+
+        if (!string.IsNullOrEmpty(entity.AreaName))
+        {
+            meta.Add(Row("Area", entity.AreaName));
+        }
+        meta.Add(Row("Entity ID", entity.EntityId));
+
+        return new Details
+        {
+            Title = entity.FriendlyName,
+            Metadata = meta.ToArray(),
+        };
+    }
+
+    private static void AddLightRows(HaEntity entity, List<IDetailsElement> meta)
+    {
+        // brightness in HA states is 0-255
+        if (entity.Attributes.TryGetValue("brightness", out var b) && b is long br && br > 0)
+        {
+            meta.Add(Row("Brightness", $"{(int)System.Math.Round(br / 255.0 * 100)}%"));
+        }
+        if (entity.Attributes.TryGetValue("color_temp_kelvin", out var ctk) && ctk is long k && k > 0)
+        {
+            meta.Add(Row("Color temp", $"{k}K"));
+        }
+        if (entity.Attributes.TryGetValue("rgb_color", out var rgb) && rgb is not null)
+        {
+            meta.Add(Row("RGB", rgb.ToString() ?? string.Empty));
+        }
+        if (entity.Attributes.TryGetValue("color_mode", out var mode) && mode is string m && !string.IsNullOrEmpty(m))
+        {
+            meta.Add(Row("Color mode", m));
+        }
+        if (entity.Attributes.TryGetValue("effect", out var fx) && fx is string fxs && !string.IsNullOrEmpty(fxs) && !string.Equals(fxs, "none", System.StringComparison.OrdinalIgnoreCase))
+        {
+            meta.Add(Row("Effect", fxs));
+        }
+    }
+
+    private static void AddCoverRows(HaEntity entity, List<IDetailsElement> meta)
+    {
+        if (entity.Attributes.TryGetValue("current_position", out var pos) && pos is long p)
+        {
+            meta.Add(Row("Position", $"{p}%"));
+        }
+        if (entity.Attributes.TryGetValue("current_tilt_position", out var tilt) && tilt is long t)
+        {
+            meta.Add(Row("Tilt", $"{t}%"));
+        }
+        if (entity.Attributes.TryGetValue("device_class", out var dc) && dc is string dcs && !string.IsNullOrEmpty(dcs))
+        {
+            meta.Add(Row("Device class", dcs));
+        }
+    }
+
+    private static DetailsElement Row(string key, string value) => new()
+    {
+        Key = key,
+        Data = new DetailsLink { Text = value },
+    };
+
     private static IconInfo IconForEntity(HaEntity entity)
     {
-        if (entity.Domain != "light") return Icons.App;
-
-        // Detect a lights group via the standard HA `mdi:lightbulb-group`
-        // entity icon override. Falls back to a single bulb otherwise.
-        var isGroup = entity.Attributes.TryGetValue("icon", out var ic)
-            && ic is string s
-            && string.Equals(s, "mdi:lightbulb-group", System.StringComparison.OrdinalIgnoreCase);
-
         var unavailable = string.Equals(entity.State, "unavailable", System.StringComparison.OrdinalIgnoreCase);
-        if (unavailable)
+
+        if (entity.Domain == "light")
         {
-            return isGroup ? Icons.LightGroupUnavailable : Icons.LightUnavailable;
+            // Detect a lights group via the standard HA `mdi:lightbulb-group`
+            // entity icon override. Falls back to a single bulb otherwise.
+            var isGroup = entity.Attributes.TryGetValue("icon", out var ic)
+                && ic is string s
+                && string.Equals(s, "mdi:lightbulb-group", System.StringComparison.OrdinalIgnoreCase);
+
+            if (unavailable) return isGroup ? Icons.LightGroupUnavailable : Icons.LightUnavailable;
+            if (entity.IsOn) return isGroup ? Icons.LightGroupOn : Icons.LightOn;
+            return isGroup ? Icons.LightGroupOff : Icons.LightOff;
         }
-        if (entity.IsOn)
+
+        if (entity.Domain == "cover")
         {
-            return isGroup ? Icons.LightGroupOn : Icons.LightOn;
+            if (unavailable) return Icons.CoverUnavailable;
+            return entity.State.ToLowerInvariant() switch
+            {
+                "opening" => Icons.CoverOpening,
+                "closing" => Icons.CoverClosing,
+                "closed" => Icons.CoverClosed,
+                _ => Icons.CoverOpen, // open + unknown → open
+            };
         }
-        return isGroup ? Icons.LightGroupOff : Icons.LightOff;
+
+        return Icons.App;
     }
 
     private ICommand BuildPrimaryCommand(HaEntity entity)
@@ -153,6 +240,17 @@ internal sealed partial class EntityListPage : ListPage
             displayName: $"{pct}%",
             icon: Icons.Brightness,
             extraData: new Dictionary<string, object?> { ["brightness_pct"] = pct },
+            onSuccess: OnServiceCallSucceeded));
+
+    private CommandContextItem CoverPositionPreset(HaEntity entity, int position) =>
+        new(new CallServiceCommand(
+            _client,
+            domain: "cover",
+            service: "set_cover_position",
+            entityId: entity.EntityId,
+            displayName: $"{position}%",
+            icon: position == 0 ? Icons.Close : (position == 100 ? Icons.Open : Icons.Stop),
+            extraData: new Dictionary<string, object?> { ["position"] = position },
             onSuccess: OnServiceCallSucceeded));
 
     private IContextItem[] BuildContextCommands(HaEntity entity)
@@ -186,6 +284,37 @@ internal sealed partial class EntityListPage : ListPage
                 Icon = Icons.Brightness,
                 MoreCommands = presets,
             });
+        }
+
+        if (entity.Domain == "cover")
+        {
+            items.Add(new CommandContextItem(
+                new CallServiceCommand(_client, "cover", "open_cover", entity.EntityId, $"Open {entity.FriendlyName}", icon: Icons.Open, onSuccess: OnServiceCallSucceeded)));
+            items.Add(new CommandContextItem(
+                new CallServiceCommand(_client, "cover", "close_cover", entity.EntityId, $"Close {entity.FriendlyName}", icon: Icons.Close, onSuccess: OnServiceCallSucceeded)));
+            items.Add(new CommandContextItem(
+                new CallServiceCommand(_client, "cover", "stop_cover", entity.EntityId, $"Stop {entity.FriendlyName}", icon: Icons.Stop, onSuccess: OnServiceCallSucceeded)));
+
+            // Position presets only when the cover supports set_cover_position
+            // (HA exposes this via the supported_features bitmask; bit 2 = 4
+            // means SET_POSITION). Falls back to skipping the menu silently.
+            if (entity.Attributes.TryGetValue("supported_features", out var sf) && sf is long bits && (bits & 4) == 4)
+            {
+                var presets = new IContextItem[]
+                {
+                    CoverPositionPreset(entity, 0),
+                    CoverPositionPreset(entity, 25),
+                    CoverPositionPreset(entity, 50),
+                    CoverPositionPreset(entity, 75),
+                    CoverPositionPreset(entity, 100),
+                };
+                items.Add(new CommandContextItem(new NoOpCommand())
+                {
+                    Title = "Set position…",
+                    Icon = Icons.Stop,
+                    MoreCommands = presets,
+                });
+            }
         }
 
         items.Add(new CommandContextItem(new OpenDashboardCommand(_settings, entity.EntityId)));
