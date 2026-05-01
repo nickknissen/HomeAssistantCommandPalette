@@ -160,8 +160,11 @@ APIs.
       subscribe to `state_changed` and push updates instead of polling.
       Big UX win because list items reflect state changes within ~1 s,
       and removes the area template round-trip.
-- [ ] **Assist conversation** — `POST /api/conversation/process`, render
-      the response as a CmdPal page
+- [x] **Assist conversation** — `POST /api/conversation/process`. Top-level
+      "Assist" command opens a `DynamicListPage` where the search box is
+      the input field. Press Enter on the "Ask: …" row to send; the
+      speech response renders below and persists across queries until
+      the next ask. Errors render inline. Activate copies the response.
 - [ ] **Notifications** — pull persistent notifications via WS
       `persistent_notification/get` and surface them as a CmdPal list
       page; consider a status command that shows a count
