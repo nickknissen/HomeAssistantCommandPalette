@@ -40,6 +40,15 @@ public sealed class HaSettings : JsonSettingsManager
         "Useful for self-signed certs on a LAN-only instance. Leave off if your HA is on the public internet.",
         false);
 
+    private readonly TextSetting _dashboardPathSetting = new(
+        "ha-dashboard-path",
+        "Dashboard path (optional)",
+        "Path opened by 'Open Dashboard'. Leave empty to open the HA root.",
+        string.Empty)
+    {
+        Placeholder = "/my-dashboard",
+    };
+
     public HaSettings()
     {
         FilePath = SettingsJsonPath();
@@ -47,6 +56,7 @@ public sealed class HaSettings : JsonSettingsManager
         Settings.Add(_urlSetting);
         Settings.Add(_tokenSetting);
         Settings.Add(_ignoreCertSetting);
+        Settings.Add(_dashboardPathSetting);
 
         LoadSettings();
 
@@ -58,6 +68,19 @@ public sealed class HaSettings : JsonSettingsManager
     public string Token => (_tokenSetting.Value ?? string.Empty).Trim();
 
     public bool IgnoreCertificateErrors => _ignoreCertSetting.Value;
+
+    public string DashboardPath
+    {
+        get
+        {
+            var raw = (_dashboardPathSetting.Value ?? string.Empty).Trim();
+            if (raw.Length == 0)
+            {
+                return string.Empty;
+            }
+            return raw.StartsWith('/') ? raw : "/" + raw;
+        }
+    }
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Url) && !string.IsNullOrWhiteSpace(Token);
 
