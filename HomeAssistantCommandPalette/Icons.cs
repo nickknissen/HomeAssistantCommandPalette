@@ -57,6 +57,15 @@ internal static class Icons
 
     public static IconInfo Home => IconHelpers.FromRelativePath("Assets\\Icons\\home.svg");
 
+    // Automation state-tinted icons. Yellow when enabled (state="on"),
+    // blue when disabled, grey when unavailable.
+    public static IconInfo AutomationOn => IconHelpers.FromRelativePath("Assets\\Icons\\robot-on.svg");
+    public static IconInfo AutomationOff => IconHelpers.FromRelativePath("Assets\\Icons\\robot-off.svg");
+    public static IconInfo AutomationUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\robot-unavailable.svg");
+
+    // "Trigger automation" — lightning bolt suggests "fire now".
+    public static IconInfo Trigger => IconHelpers.FromRelativePath("Assets\\Icons\\flash.svg");
+
     // Service-call command icons (use the unbaked SVG; CmdPal renders them
     // in the palette's foreground color via currentColor).
     public static IconInfo Toggle => IconHelpers.FromRelativePath("Assets\\Icons\\toggle-switch-outline.svg");

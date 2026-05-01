@@ -110,7 +110,7 @@ internal sealed partial class EntityListPage : ListPage
     {
         var meta = new List<IDetailsElement>
         {
-            Row("State", entity.State),
+            Row("State", FormatStateWithUnit(entity)),
         };
 
         if (entity.Domain == "light")
@@ -133,11 +133,30 @@ internal sealed partial class EntityListPage : ListPage
         {
             AddVacuumRows(entity, meta);
         }
+        else if (entity.Domain == "automation")
+        {
+            AddAutomationRows(entity, meta);
+        }
+        else if (entity.Domain == "sensor" || entity.Domain == "binary_sensor")
+        {
+            AddSensorRows(entity, meta);
+        }
 
         if (!string.IsNullOrEmpty(entity.AreaName))
         {
             meta.Add(Row("Area", entity.AreaName));
         }
+
+        if (entity.LastChanged is DateTimeOffset changed)
+        {
+            meta.Add(Row("Last changed", FormatRelativeTime(changed)));
+        }
+
+        if (entity.Attributes.TryGetValue("attribution", out var att) && att is string atts && !string.IsNullOrEmpty(atts))
+        {
+            meta.Add(Row("Attribution", atts));
+        }
+
         meta.Add(Row("Entity ID", entity.EntityId));
 
         return new Details
@@ -145,6 +164,39 @@ internal sealed partial class EntityListPage : ListPage
             Title = entity.FriendlyName,
             Metadata = meta.ToArray(),
         };
+    }
+
+    private static string FormatStateWithUnit(HaEntity entity)
+    {
+        var state = string.IsNullOrEmpty(entity.State) ? "(no state)" : entity.State;
+        if (entity.Attributes.TryGetValue("unit_of_measurement", out var u) && u is string unit && !string.IsNullOrEmpty(unit))
+        {
+            return $"{state} {unit}";
+        }
+        return state;
+    }
+
+    private static string FormatRelativeTime(DateTimeOffset when)
+    {
+        var diff = DateTimeOffset.UtcNow - when;
+        if (diff.TotalSeconds < 0) return when.ToLocalTime().ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+        if (diff.TotalSeconds < 60) return "just now";
+        if (diff.TotalMinutes < 60) return $"{(int)diff.TotalMinutes}m ago";
+        if (diff.TotalHours < 24) return $"{(int)diff.TotalHours}h ago";
+        if (diff.TotalDays < 7) return $"{(int)diff.TotalDays}d ago";
+        return when.ToLocalTime().ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static void AddSensorRows(HaEntity entity, List<IDetailsElement> meta)
+    {
+        if (entity.Attributes.TryGetValue("device_class", out var dc) && dc is string dcs && !string.IsNullOrEmpty(dcs))
+        {
+            meta.Add(Row("Device class", dcs));
+        }
+        if (entity.Attributes.TryGetValue("state_class", out var sc) && sc is string scs && !string.IsNullOrEmpty(scs))
+        {
+            meta.Add(Row("State class", scs));
+        }
     }
 
     private static void AddLightRows(HaEntity entity, List<IDetailsElement> meta)
@@ -169,6 +221,31 @@ internal sealed partial class EntityListPage : ListPage
         if (entity.Attributes.TryGetValue("effect", out var fx) && fx is string fxs && !string.IsNullOrEmpty(fxs) && !string.Equals(fxs, "none", System.StringComparison.OrdinalIgnoreCase))
         {
             meta.Add(Row("Effect", fxs));
+        }
+    }
+
+    private static void AddAutomationRows(HaEntity entity, List<IDetailsElement> meta)
+    {
+        if (entity.Attributes.TryGetValue("last_triggered", out var lt) && lt is string lts && !string.IsNullOrEmpty(lts))
+        {
+            // ISO timestamp from HA. Show as the original ISO — clearer than
+            // a fragile relative-time format, and tooling-friendly.
+            meta.Add(Row("Last triggered", lts));
+        }
+        if (entity.Attributes.TryGetValue("mode", out var mode) && mode is string ms && !string.IsNullOrEmpty(ms))
+        {
+            meta.Add(Row("Mode", ms));
+        }
+        if (entity.Attributes.TryGetValue("current", out var current))
+        {
+            // Number of currently-running instances (relevant for parallel
+            // / queued mode). 0 normally; >0 means the automation is mid-run.
+            var v = current switch { long l => l.ToString(System.Globalization.CultureInfo.InvariantCulture), double d => ((int)d).ToString(System.Globalization.CultureInfo.InvariantCulture), _ => null };
+            if (v is not null) meta.Add(Row("Running", v));
+        }
+        if (entity.Attributes.TryGetValue("id", out var id) && id is string ids && !string.IsNullOrEmpty(ids))
+        {
+            meta.Add(Row("Automation ID", ids));
         }
     }
 
@@ -340,6 +417,12 @@ internal sealed partial class EntityListPage : ListPage
                 : Icons.VacuumIdle;
         }
 
+        if (entity.Domain == "automation")
+        {
+            if (unavailable) return Icons.AutomationUnavailable;
+            return entity.IsOn ? Icons.AutomationOn : Icons.AutomationOff;
+        }
+
         return Icons.App;
     }
 
@@ -462,6 +545,14 @@ internal sealed partial class EntityListPage : ListPage
                 new CallServiceCommand(_client, entity.Domain, "turn_on", entity.EntityId, $"Turn on {entity.FriendlyName}", icon: Icons.TurnOn, onSuccess: OnServiceCallSucceeded)));
             items.Add(new CommandContextItem(
                 new CallServiceCommand(_client, entity.Domain, "turn_off", entity.EntityId, $"Turn off {entity.FriendlyName}", icon: Icons.TurnOff, onSuccess: OnServiceCallSucceeded)));
+        }
+
+        // Manual trigger — fire the automation regardless of trigger
+        // conditions. Distinct from turn_on, which only enables it.
+        if (entity.Domain == "automation")
+        {
+            items.Add(new CommandContextItem(
+                new CallServiceCommand(_client, "automation", "trigger", entity.EntityId, $"Trigger {entity.FriendlyName}", icon: Icons.Trigger, onSuccess: OnServiceCallSucceeded)));
         }
 
         // Light brightness presets — nested under a single "Set brightness"
