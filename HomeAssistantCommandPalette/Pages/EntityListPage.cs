@@ -122,10 +122,30 @@ internal sealed partial class EntityListPage : ListPage
             Title = entity.FriendlyName,
             Subtitle = BuildSubtitle(entity),
             Tags = BuildTags(entity),
-            Icon = IconForEntity(entity),
+            Icon = ResolveEntityIcon(entity),
             MoreCommands = BuildContextCommands(entity, primary),
             Details = BuildDetails(entity),
         };
+    }
+
+    /// <summary>
+    /// Wraps <see cref="IconForEntity"/> with instance-level fallbacks that
+    /// need authenticated HTTP. Persons get their <c>entity_picture</c>
+    /// avatar (Gravatar or HA-served) when one is set; if the fetch fails
+    /// we drop back to the state-tinted account glyph.
+    /// </summary>
+    private IconInfo ResolveEntityIcon(HaEntity entity)
+    {
+        if (entity.Domain == "person"
+            && entity.Attributes.TryGetValue("entity_picture", out var pic)
+            && pic is string picUrl
+            && !string.IsNullOrEmpty(picUrl))
+        {
+            var path = _client.GetEntityPicturePath(entity.EntityId, picUrl);
+            if (path is not null) return new IconInfo(path);
+        }
+
+        return IconForEntity(entity);
     }
 
     private Details BuildDetails(HaEntity entity)
