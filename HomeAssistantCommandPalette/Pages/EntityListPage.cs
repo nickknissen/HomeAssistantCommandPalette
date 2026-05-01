@@ -141,6 +141,10 @@ internal sealed partial class EntityListPage : ListPage
         {
             AddPersonRows(entity, meta);
         }
+        else if (entity.Domain == "update")
+        {
+            AddUpdateRows(entity, meta);
+        }
         else if (entity.Domain == "automation")
         {
             AddAutomationRows(entity, meta);
@@ -229,6 +233,40 @@ internal sealed partial class EntityListPage : ListPage
         if (entity.Attributes.TryGetValue("effect", out var fx) && fx is string fxs && !string.IsNullOrEmpty(fxs) && !string.Equals(fxs, "none", System.StringComparison.OrdinalIgnoreCase))
         {
             meta.Add(Row("Effect", fxs));
+        }
+    }
+
+    private static void AddUpdateRows(HaEntity entity, List<IDetailsElement> meta)
+    {
+        if (entity.Attributes.TryGetValue("title", out var t) && t is string ts && !string.IsNullOrEmpty(ts))
+        {
+            meta.Add(Row("Title", ts));
+        }
+        if (entity.Attributes.TryGetValue("installed_version", out var iv) && iv is string ivs && !string.IsNullOrEmpty(ivs))
+        {
+            meta.Add(Row("Installed", ivs));
+        }
+        if (entity.Attributes.TryGetValue("latest_version", out var lv) && lv is string lvs && !string.IsNullOrEmpty(lvs))
+        {
+            meta.Add(Row("Latest", lvs));
+        }
+        // in_progress can be a bool (false) or a numeric percent during install.
+        if (entity.Attributes.TryGetValue("in_progress", out var ip))
+        {
+            switch (ip)
+            {
+                case bool b when b: meta.Add(Row("In progress", "yes")); break;
+                case long l: meta.Add(Row("In progress", $"{l}%")); break;
+                case double d: meta.Add(Row("In progress", $"{(int)d}%")); break;
+            }
+        }
+        if (entity.Attributes.TryGetValue("auto_update", out var au) && au is bool aub)
+        {
+            meta.Add(Row("Auto update", aub ? "yes" : "no"));
+        }
+        if (entity.Attributes.TryGetValue("release_url", out var ru) && ru is string rus && !string.IsNullOrEmpty(rus))
+        {
+            meta.Add(Row("Release notes", rus));
         }
     }
 
@@ -936,6 +974,50 @@ internal sealed partial class EntityListPage : ListPage
             }
         }
 
+        if (entity.Domain == "update")
+        {
+            // supported_features bits (HA UpdateEntityFeature):
+            //   1 INSTALL, 2 SPECIFIC_VERSION, 4 PROGRESS, 8 BACKUP, 16 RELEASE_NOTES.
+            var sf = entity.Attributes.TryGetValue("supported_features", out var sfo) && sfo is long b ? b : -1;
+            bool Has(long bit) => sf < 0 || (sf & bit) == bit;
+
+            // Updates are a binary state: state="on" means an update is
+            // available. in_progress is either a bool or a numeric percent
+            // while installing; either non-false form means an install is
+            // already running and Install should be hidden.
+            var available = entity.IsOn;
+            var inProgress = entity.Attributes.TryGetValue("in_progress", out var ipo)
+                && ipo is not (null or false);
+
+            if (available && !inProgress && Has(1))
+            {
+                // Always request a backup when the integration supports it —
+                // matches Raycast's default and is the safer choice. Without
+                // BACKUP support the param is dropped (HA would 400 on it).
+                IReadOnlyDictionary<string, object?>? extra = Has(8)
+                    ? new Dictionary<string, object?> { ["backup"] = true }
+                    : null;
+                items.Add(new CommandContextItem(
+                    new CallServiceCommand(_client, "update", "install", entity.EntityId,
+                        $"Install {entity.FriendlyName}", icon: Icons.Play,
+                        extraData: extra,
+                        onSuccess: OnServiceCallSucceeded)));
+            }
+
+            if (available)
+            {
+                items.Add(new CommandContextItem(
+                    new CallServiceCommand(_client, "update", "skip", entity.EntityId,
+                        $"Skip {entity.FriendlyName}", icon: Icons.Next,
+                        onSuccess: OnServiceCallSucceeded)));
+            }
+
+            if (entity.Attributes.TryGetValue("release_url", out var ru) && ru is string rus && !string.IsNullOrEmpty(rus))
+            {
+                items.Add(new CommandContextItem(new OpenUrlCommand(rus) { Name = "Open release notes" }));
+            }
+        }
+
         if (entity.Domain == "person")
         {
             // Open in Google Maps — universal across platforms (Apple Maps
@@ -984,7 +1066,7 @@ internal sealed partial class EntityListPage : ListPage
         var showDomainTag = _domains is null || _domains.Count > 1;
         var tags = new List<Tag>(2);
 
-        if (entity.Domain is "light" or "switch" or "fan" or "input_boolean" or "automation" or "media_player" or "binary_sensor" or "cover")
+        if (entity.Domain is "light" or "switch" or "fan" or "input_boolean" or "automation" or "media_player" or "binary_sensor" or "cover" or "update")
         {
             tags.Add(entity.IsOn
                 ? new Tag("ON")

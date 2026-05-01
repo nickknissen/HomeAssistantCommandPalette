@@ -66,8 +66,10 @@ remaining domains live in the granular list below.
       Speed up / Speed down stepped from `percentage_step`, gated by
       SET_SPEED bit; details rows for percentage / preset_mode /
       oscillating / direction
-- [ ] **Updates** — Install button gated by `supported_features`; Skip;
-      version (current → latest); release notes link
+- [x] **Updates** — Install (with backup when supported, gated by INSTALL
+      bit + state="on" + not in_progress), Skip, Open release notes;
+      details rows for title / installed / latest / progress / auto_update;
+      ON/OFF tag (ON = update available)
 - [ ] **Scripts** — input form for scripts that take `fields` parameters
       (needs CmdPal Form support — defer if blocked)
 - [ ] **Cameras** — snapshot via `/api/camera_proxy/{entity_id}` rendered
