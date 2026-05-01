@@ -49,6 +49,18 @@ internal sealed partial class ConnectionCheckPage : ListPage
         items.Add(Row("Token length", _settings.Token.Length > 0 ? $"{_settings.Token.Length} chars" : "(not set)", Icons.App));
         items.Add(Row("Ignore TLS errors", _settings.IgnoreCertificateErrors ? "yes" : "no", Icons.App));
 
+        // Touching GetStates exercises the area-map fetch as a side effect,
+        // so the diagnostic below reflects the latest attempt.
+        if (probe.Success)
+        {
+            _ = _client.GetStates();
+            items.Add(Row("Areas resolved", FormatAreaCount(_client.LastAreaCount, _client.LastAreaError), Icons.Home));
+            if (!string.IsNullOrEmpty(_client.LastAreaError))
+            {
+                items.Add(Row("Areas error", _client.LastAreaError, Icons.App));
+            }
+        }
+
         if (!probe.Success && probe.ErrorKind is HaErrorKind.NotConfigured or HaErrorKind.Unauthorized or HaErrorKind.InvalidUrl)
         {
             items.Add(new ListItem((ICommand)_settings.Settings.SettingsPage)
@@ -81,6 +93,16 @@ internal sealed partial class ConnectionCheckPage : ListPage
             HaErrorKind.NetworkError => $"Unreachable — {probe.ErrorMessage}",
             HaErrorKind.ParseFailed => $"Bad response — {probe.ErrorMessage}",
             _ => probe.ErrorMessage ?? "Failed",
+        };
+    }
+
+    private static string FormatAreaCount(int count, string error)
+    {
+        return count switch
+        {
+            -1 => string.IsNullOrEmpty(error) ? "Failed" : "Failed (see error below)",
+            0 => "0 — no entities have areas assigned",
+            _ => $"{count} entit{(count == 1 ? "y" : "ies")} mapped",
         };
     }
 }

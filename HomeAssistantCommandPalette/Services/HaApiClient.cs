@@ -38,6 +38,10 @@ public sealed partial class HaApiClient : IDisposable
     private DateTime _areaCachedAtUtc = DateTime.MinValue;
     // Areas rarely change — keep them around longer than the state cache.
     private static readonly TimeSpan AreaCacheTtl = TimeSpan.FromMinutes(5);
+    // When a fetch fails or returns no areas, retry sooner instead of
+    // sitting on a useless cached result for 5 minutes. Covers the case
+    // where the user is fixing their HA config in another tab.
+    private static readonly TimeSpan AreaEmptyRetryTtl = TimeSpan.FromSeconds(30);
 
     private readonly object _cameraCacheLock = new();
     private readonly Dictionary<string, (string Path, DateTime FetchedAtUtc)> _cameraCache = new(StringComparer.Ordinal);
@@ -70,6 +74,13 @@ public sealed partial class HaApiClient : IDisposable
     /// to surface the right "no area" hint.
     /// </summary>
     public int LastAreaCount { get; private set; } = -1;
+
+    /// <summary>
+    /// Last error from the area-map fetch. Empty when the most recent
+    /// fetch succeeded (regardless of count). Surfaced in Connection Check
+    /// so the user can see why areas aren't showing up.
+    /// </summary>
+    public string LastAreaError { get; private set; } = string.Empty;
 
     public HaApiClient(HaSettings settings)
     {
@@ -502,6 +513,15 @@ public sealed partial class HaApiClient : IDisposable
             {
                 return _cachedAreaMap;
             }
+            // Empty/null cache: retry sooner so the user isn't stuck for
+            // 5 min after fixing area assignments in HA.
+            var emptyTtl = (_cachedAreaMap is null || _cachedAreaMap.Count == 0)
+                ? AreaEmptyRetryTtl
+                : AreaCacheTtl;
+            if (_cachedAreaMap is not null && DateTime.UtcNow - _areaCachedAtUtc < emptyTtl)
+            {
+                return _cachedAreaMap;
+            }
         }
 
         try
@@ -521,20 +541,28 @@ public sealed partial class HaApiClient : IDisposable
             var response = client.PostAsync($"{_settings.Url}/api/template", content, cts.Token).GetAwaiter().GetResult();
             if (!response.IsSuccessStatusCode)
             {
-                CacheAreas(null);
+                var body = response.Content.ReadAsStringAsync(cts.Token).GetAwaiter().GetResult();
+                CacheAreas(null, $"HTTP {(int)response.StatusCode}: {Truncate(body, 200)}");
                 return null;
             }
             var raw = response.Content.ReadAsStringAsync(cts.Token).GetAwaiter().GetResult();
 
             var map = ParseAreaMap(raw);
-            CacheAreas(map);
+            CacheAreas(map, string.Empty);
             return map;
         }
-        catch
+        catch (Exception ex)
         {
-            CacheAreas(null);
+            CacheAreas(null, ex.Message);
             return null;
         }
+    }
+
+    private static string Truncate(string s, int max)
+    {
+        if (string.IsNullOrEmpty(s)) return string.Empty;
+        s = s.Trim();
+        return s.Length <= max ? s : s[..max] + "…";
     }
 
     private static Dictionary<string, string> ParseAreaMap(string raw)
@@ -570,13 +598,14 @@ public sealed partial class HaApiClient : IDisposable
         return map;
     }
 
-    private void CacheAreas(Dictionary<string, string>? map)
+    private void CacheAreas(Dictionary<string, string>? map, string error)
     {
         lock (_areaCacheLock)
         {
             _cachedAreaMap = map;
             _areaCachedAtUtc = DateTime.UtcNow;
             LastAreaCount = map is null ? -1 : map.Count;
+            LastAreaError = error;
         }
     }
 
