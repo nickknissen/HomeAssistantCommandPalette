@@ -97,6 +97,20 @@ public sealed partial class HaApiClient : IDisposable
     }
 
     public bool TryCallService(string domain, string service, string entityId, out string error)
+        => TryCallService(domain, service, entityId, extraData: null, out error);
+
+    /// <summary>
+    /// Calls <c>POST /api/services/{domain}/{service}</c> with a body of
+    /// <c>{"entity_id": ..., ...extraData}</c>. <paramref name="extraData"/>
+    /// values may be string, bool, int / long / double; anything else is
+    /// rendered via ToString.
+    /// </summary>
+    public bool TryCallService(
+        string domain,
+        string service,
+        string entityId,
+        IReadOnlyDictionary<string, object?>? extraData,
+        out string error)
     {
         error = string.Empty;
         if (!_settings.IsConfigured)
@@ -109,7 +123,7 @@ public sealed partial class HaApiClient : IDisposable
         {
             var client = GetClient();
             var url = $"{_settings.Url}/api/services/{domain}/{service}";
-            using var content = BuildEntityIdPayload(entityId);
+            using var content = BuildServiceCallPayload(entityId, extraData);
 
             using var cts = new CancellationTokenSource(DefaultTimeout);
             var response = client.PostAsync(url, content, cts.Token).GetAwaiter().GetResult();
@@ -134,21 +148,46 @@ public sealed partial class HaApiClient : IDisposable
         }
     }
 
-    // Build {"entity_id":"..."} without going through JsonSerializer's reflection
-    // path — keeps the assembly trim/AOT clean.
-    private static ByteArrayContent BuildEntityIdPayload(string entityId)
+    // Build {"entity_id":"...", ...extraData} without going through
+    // JsonSerializer's reflection path — keeps the assembly trim/AOT clean.
+    private static ByteArrayContent BuildServiceCallPayload(
+        string entityId,
+        IReadOnlyDictionary<string, object?>? extraData)
     {
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
         {
             writer.WriteStartObject();
             writer.WriteString("entity_id", entityId);
+            if (extraData is not null)
+            {
+                foreach (var kv in extraData)
+                {
+                    if (string.Equals(kv.Key, "entity_id", StringComparison.Ordinal)) continue;
+                    WriteJsonValue(writer, kv.Key, kv.Value);
+                }
+            }
             writer.WriteEndObject();
         }
         var bytes = stream.ToArray();
         var payload = new ByteArrayContent(bytes);
         payload.Headers.ContentType = new MediaTypeHeaderValue("application/json");
         return payload;
+    }
+
+    private static void WriteJsonValue(Utf8JsonWriter writer, string key, object? value)
+    {
+        switch (value)
+        {
+            case null: writer.WriteNull(key); break;
+            case bool b: writer.WriteBoolean(key, b); break;
+            case int i: writer.WriteNumber(key, i); break;
+            case long l: writer.WriteNumber(key, l); break;
+            case double d: writer.WriteNumber(key, d); break;
+            case float f: writer.WriteNumber(key, f); break;
+            case string s: writer.WriteString(key, s); break;
+            default: writer.WriteString(key, value.ToString() ?? string.Empty); break;
+        }
     }
 
     private HaQueryResult FetchStates()

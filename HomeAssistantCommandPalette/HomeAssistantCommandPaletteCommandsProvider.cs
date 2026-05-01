@@ -56,22 +56,21 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
     public HomeAssistantCommandPaletteCommandsProvider()
     {
         DisplayName = "Home Assistant";
-        Icon = IconHelpers.FromRelativePath("Assets\\Square44x44Logo.scale-200.png");
+        Icon = Icons.App;
 
         _settings = new HaSettings();
         _apiClient = new HaApiClient(_settings);
         Settings = _settings.Settings;
 
-        var icon = IconHelpers.FromRelativePath("Assets\\Square44x44Logo.scale-200.png");
         var commands = new List<ICommandItem>(DomainPages.Length + 1);
 
         foreach (var page in DomainPages)
         {
-            commands.Add(new CommandItem(new EntityListPage(_settings, _apiClient, page.Title, page.Id, page.Domains))
+            commands.Add(new CommandItem(new EntityListPage(_settings, _apiClient, page.Title, page.Id, page.Domains, Icons.App))
             {
                 Title = page.Title,
                 Subtitle = "Home Assistant",
-                Icon = icon,
+                Icon = Icons.App,
             });
         }
 
@@ -79,7 +78,7 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
         {
             Title = "Open Dashboard",
             Subtitle = "Home Assistant",
-            Icon = icon,
+            Icon = Icons.App,
         });
 
         _commands = commands.ToArray();

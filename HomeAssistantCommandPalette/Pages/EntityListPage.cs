@@ -25,13 +25,14 @@ internal sealed partial class EntityListPage : ListPage
         HaApiClient client,
         string title,
         string id,
-        IReadOnlyCollection<string>? domains = null)
+        IReadOnlyCollection<string>? domains = null,
+        IconInfo? icon = null)
     {
         _settings = settings;
         _client = client;
         _domains = domains is null ? null : new HashSet<string>(domains, StringComparer.Ordinal);
 
-        Icon = IconHelpers.FromRelativePath("Assets\\Square44x44Logo.scale-200.png");
+        Icon = icon ?? Icons.App;
         Title = title;
         Name = "Open";
         Id = id;
@@ -98,8 +99,31 @@ internal sealed partial class EntityListPage : ListPage
             Title = entity.FriendlyName,
             Subtitle = BuildSubtitle(entity),
             Tags = BuildTags(entity),
+            Icon = IconForEntity(entity),
             MoreCommands = BuildContextCommands(entity),
         };
+    }
+
+    private static IconInfo IconForEntity(HaEntity entity)
+    {
+        if (entity.Domain != "light") return Icons.App;
+
+        // Detect a lights group via the standard HA `mdi:lightbulb-group`
+        // entity icon override. Falls back to a single bulb otherwise.
+        var isGroup = entity.Attributes.TryGetValue("icon", out var ic)
+            && ic is string s
+            && string.Equals(s, "mdi:lightbulb-group", System.StringComparison.OrdinalIgnoreCase);
+
+        var unavailable = string.Equals(entity.State, "unavailable", System.StringComparison.OrdinalIgnoreCase);
+        if (unavailable)
+        {
+            return isGroup ? Icons.LightGroupUnavailable : Icons.LightUnavailable;
+        }
+        if (entity.IsOn)
+        {
+            return isGroup ? Icons.LightGroupOn : Icons.LightOn;
+        }
+        return isGroup ? Icons.LightGroupOff : Icons.LightOff;
     }
 
     private ICommand BuildPrimaryCommand(HaEntity entity)
@@ -109,7 +133,7 @@ internal sealed partial class EntityListPage : ListPage
         return entity.Domain switch
         {
             "light" or "switch" or "fan" or "input_boolean" or "automation" or "group" or "cover" or "media_player"
-                => new CallServiceCommand(_client, entity.Domain, "toggle", entity.EntityId, $"Toggle {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded),
+                => new CallServiceCommand(_client, entity.Domain, "toggle", entity.EntityId, $"Toggle {entity.FriendlyName}", icon: Icons.Toggle, onSuccess: OnServiceCallSucceeded),
             "scene"
                 => new CallServiceCommand(_client, "scene", "turn_on", entity.EntityId, $"Activate {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded),
             "script"
@@ -120,16 +144,48 @@ internal sealed partial class EntityListPage : ListPage
         };
     }
 
+    private CommandContextItem BrightnessPreset(HaEntity entity, int pct) =>
+        new(new CallServiceCommand(
+            _client,
+            domain: "light",
+            service: "turn_on",
+            entityId: entity.EntityId,
+            displayName: $"{pct}%",
+            icon: Icons.Brightness,
+            extraData: new Dictionary<string, object?> { ["brightness_pct"] = pct },
+            onSuccess: OnServiceCallSucceeded));
+
     private IContextItem[] BuildContextCommands(HaEntity entity)
     {
-        var items = new List<IContextItem>(4);
+        var items = new List<IContextItem>(8);
 
         if (entity.Domain is "light" or "switch" or "fan" or "input_boolean" or "automation" or "group" or "media_player")
         {
             items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, entity.Domain, "turn_on", entity.EntityId, $"Turn on {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
+                new CallServiceCommand(_client, entity.Domain, "turn_on", entity.EntityId, $"Turn on {entity.FriendlyName}", icon: Icons.TurnOn, onSuccess: OnServiceCallSucceeded)));
             items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, entity.Domain, "turn_off", entity.EntityId, $"Turn off {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
+                new CallServiceCommand(_client, entity.Domain, "turn_off", entity.EntityId, $"Turn off {entity.FriendlyName}", icon: Icons.TurnOff, onSuccess: OnServiceCallSucceeded)));
+        }
+
+        // Light brightness presets — nested under a single "Set brightness"
+        // parent so the top-level context menu stays short. Each preset
+        // calls light.turn_on with brightness_pct (HA turns the light on
+        // at that level whether it was on or off).
+        if (entity.Domain == "light")
+        {
+            var presets = new IContextItem[]
+            {
+                BrightnessPreset(entity, 25),
+                BrightnessPreset(entity, 50),
+                BrightnessPreset(entity, 75),
+                BrightnessPreset(entity, 100),
+            };
+            items.Add(new CommandContextItem(new NoOpCommand())
+            {
+                Title = "Set brightness…",
+                Icon = Icons.Brightness,
+                MoreCommands = presets,
+            });
         }
 
         items.Add(new CommandContextItem(new OpenDashboardCommand(_settings, entity.EntityId)));
@@ -149,31 +205,34 @@ internal sealed partial class EntityListPage : ListPage
         return entity.AreaName ?? string.Empty;
     }
 
-    private static Tag[] BuildTags(HaEntity entity)
+    private Tag[] BuildTags(HaEntity entity)
     {
-        var domainTag = new Tag(entity.Domain) { ToolTip = "Domain" };
+        // Hide the domain tag on single-domain pages (Lights, Covers, ...) —
+        // it's redundant. Keep it on All Entities and multi-domain pages
+        // (Buttons, Helpers) so users can tell entities apart.
+        var showDomainTag = _domains is null || _domains.Count > 1;
+        var tags = new List<Tag>(2);
 
         if (entity.Domain is "light" or "switch" or "fan" or "input_boolean" or "automation" or "media_player" or "binary_sensor" or "cover")
         {
-            return entity.IsOn
-                ? [
-                    new Tag("ON")
-                    {
-                        Background = ColorHelpers.FromArgb(255, 76, 161, 222),
-                        Foreground = ColorHelpers.FromRgb(255, 255, 255),
-                    },
-                    domainTag,
-                ]
-                : [
-                    new Tag("OFF")
-                    {
-                        Background = ColorHelpers.FromRgb(120, 120, 120),
-                        Foreground = ColorHelpers.FromRgb(255, 255, 255),
-                    },
-                    domainTag,
-                ];
+            tags.Add(entity.IsOn
+                ? new Tag("ON")
+                {
+                    Background = ColorHelpers.FromArgb(255, 76, 161, 222),
+                    Foreground = ColorHelpers.FromRgb(255, 255, 255),
+                }
+                : new Tag("OFF")
+                {
+                    Background = ColorHelpers.FromRgb(120, 120, 120),
+                    Foreground = ColorHelpers.FromRgb(255, 255, 255),
+                });
         }
 
-        return [domainTag];
+        if (showDomainTag)
+        {
+            tags.Add(new Tag(entity.Domain) { ToolTip = "Domain" });
+        }
+
+        return tags.ToArray();
     }
 }
