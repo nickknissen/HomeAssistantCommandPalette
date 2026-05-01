@@ -747,6 +747,15 @@ internal sealed partial class EntityListPage : ListPage
         switch (dc)
         {
             case "battery":
+                // Charge level drives both shape (10% buckets) and tint
+                // (red ≤ 20, yellow ≤ 30, blue otherwise). When the state
+                // doesn't parse as a number we keep the static fallback.
+                if (double.TryParse(entity.State,
+                        System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var pct))
+                {
+                    return Icons.BatteryForLevel(pct, unavailable);
+                }
                 return unavailable ? Icons.BatteryUnavailable : Icons.Battery;
             case "temperature":
                 return unavailable ? Icons.TemperatureUnavailable : Icons.Temperature;

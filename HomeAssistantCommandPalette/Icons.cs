@@ -172,8 +172,43 @@ internal static class Icons
     public static IconInfo PowerFactorUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\power-factor-unavailable.svg");
     public static IconInfo CarbonDioxide => IconHelpers.FromRelativePath("Assets\\Icons\\carbon-dioxide-off.svg");
     public static IconInfo CarbonDioxideUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\carbon-dioxide-unavailable.svg");
+    // Battery fallback when the entity state can't be parsed as a percentage.
     public static IconInfo Battery => IconHelpers.FromRelativePath("Assets\\Icons\\battery-off.svg");
     public static IconInfo BatteryUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\battery-unavailable.svg");
+
+    /// <summary>
+    /// Returns a battery icon whose shape reflects the charge level (10
+    /// buckets of 10% plus an "outline" empty and a "full" 100% bucket)
+    /// and whose tint reflects urgency: red ≤ 20%, yellow ≤ 30%, blue
+    /// otherwise. Unavailable always wins. Mirrors Raycast's
+    /// getBatteryIconFromState in src/components/battery/utils.ts.
+    /// </summary>
+    public static IconInfo BatteryForLevel(double percent, bool unavailable)
+    {
+        // Clamp into the 11 baked buckets: 0 → empty outline; 10 → full.
+        var bucket = (int)System.Math.Floor(percent / 10.0);
+        if (bucket < 0) bucket = 0;
+        if (bucket > 10) bucket = 10;
+
+        var stem = bucket switch
+        {
+            0 => "battery-outline",
+            10 => "battery-full",
+            _ => $"battery-{bucket * 10}",
+        };
+
+        // Match the Raycast urgency thresholds. The bake step only produced
+        // the (bucket × colour) combinations that can actually occur, so
+        // these branches must stay aligned with that matrix in
+        // scripts/bake-icons.ps1.
+        string suffix;
+        if (unavailable) suffix = "unavailable";
+        else if (percent <= 20) suffix = "low";
+        else if (percent <= 30) suffix = "on";
+        else suffix = "off";
+
+        return IconHelpers.FromRelativePath($"Assets\\Icons\\{stem}-{suffix}.svg");
+    }
 
     // Generic fallback when no domain or device_class match is found.
     public static IconInfo Shape => IconHelpers.FromRelativePath("Assets\\Icons\\shape-off.svg");
