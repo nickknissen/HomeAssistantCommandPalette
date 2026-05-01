@@ -180,6 +180,10 @@ APIs.
 - [ ] **Internal/external URL fallback** with home-network detection
       (Wi-Fi SSID via `WlanQueryInterface`, or ping check)
 - [ ] **Custom HTTP headers** for users behind Cloudflare Access etc.
+- [ ] **Configurable camera refresh interval** — expose the auto-refresh
+      cadence as a setting (Raycast `camerarefreshinterval`, default
+      3000 ms, 0 disables). Pairs with the periodic auto-refresh item
+      under Cameras above.
 
 ---
 
@@ -237,14 +241,3 @@ APIs.
 - Each top-level `CommandItem` is searched by **Title + Subtitle**. There's no dedicated keyword/alias property — bake aliases into the Subtitle string if you need them.
 - Give each top-level command a stable `Id` so CmdPal can remember user-pinned/disabled state across reinstalls (we use `ha.<domain>`).
 - `IconInfo` has no runtime tint. State-tinted icons (yellow on / blue off / grey unavailable) are pre-baked from a single source SVG; the generator script lives inline in the `Assets/Icons/` workflow.
-
----
-
-## Working list (in progress)
-
-- [ ] **Phase A details (universal)** — uncommitted as of this writing
-  - [x] Unit-aware State row (`21.4 °C` instead of bare state)
-  - [x] Last changed (relative time: `5m ago`, `2h ago`, …)
-  - [x] Attribution row when present
-  - [x] Sensor / binary sensor: device_class + state_class
-  - [ ] Commit + deploy
