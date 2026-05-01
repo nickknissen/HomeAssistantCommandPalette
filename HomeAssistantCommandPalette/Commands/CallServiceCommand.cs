@@ -1,3 +1,4 @@
+using System;
 using HomeAssistantCommandPalette.Services;
 using Microsoft.CommandPalette.Extensions;
 using Microsoft.CommandPalette.Extensions.Toolkit;
@@ -11,6 +12,7 @@ internal sealed partial class CallServiceCommand : InvokableCommand
     private readonly string _service;
     private readonly string _entityId;
     private readonly string _displayName;
+    private readonly Action? _onSuccess;
 
     public CallServiceCommand(
         HaApiClient client,
@@ -18,13 +20,15 @@ internal sealed partial class CallServiceCommand : InvokableCommand
         string service,
         string entityId,
         string displayName,
-        string? iconRelativePath = null)
+        string? iconRelativePath = null,
+        Action? onSuccess = null)
     {
         _client = client;
         _domain = domain;
         _service = service;
         _entityId = entityId;
         _displayName = displayName;
+        _onSuccess = onSuccess;
         Icon = IconHelpers.FromRelativePath(iconRelativePath ?? "Assets\\Square44x44Logo.scale-200.png");
     }
 
@@ -34,6 +38,7 @@ internal sealed partial class CallServiceCommand : InvokableCommand
     {
         if (_client.TryCallService(_domain, _service, _entityId, out var error))
         {
+            _onSuccess?.Invoke();
             return CommandResult.ShowToast(new ToastArgs
             {
                 Message = $"{_displayName}: {_entityId}",

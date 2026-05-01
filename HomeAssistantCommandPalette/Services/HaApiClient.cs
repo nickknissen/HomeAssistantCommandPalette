@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -31,6 +32,30 @@ public sealed partial class HaApiClient : IDisposable
     private HaQueryResult? _cachedResult;
     private DateTime _cachedAtUtc = DateTime.MinValue;
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(3);
+
+    private readonly object _areaCacheLock = new();
+    private Dictionary<string, string>? _cachedAreaMap;
+    private DateTime _areaCachedAtUtc = DateTime.MinValue;
+    // Areas rarely change — keep them around longer than the state cache.
+    private static readonly TimeSpan AreaCacheTtl = TimeSpan.FromMinutes(5);
+
+    // Single Jinja template that returns a JSON object mapping each
+    // entity_id to its area name. HA's `area_name(entity_id)` walks
+    // entity → device → area in the registry, matching the resolution
+    // Raycast does over WebSocket. Dict comprehension + tojson is the
+    // cleanest variant: no commas to manage, and the output is real JSON.
+    private const string AreaMapTemplate =
+        "{{ {s.entity_id: area_name(s.entity_id) for s in states if area_name(s.entity_id)} | tojson }}";
+
+    /// <summary>
+    /// Diagnostic for the most recent area map fetch:
+    ///   -1 = never attempted / failed (template errored or network blip)
+    ///    0 = HA responded but no entities have areas assigned
+    ///   >0 = number of entities with an area in HA
+    /// Read by <see cref="HomeAssistantCommandPalette.Pages.EntityListPage"/>
+    /// to surface the right "no area" hint.
+    /// </summary>
+    public int LastAreaCount { get; private set; } = -1;
 
     public HaApiClient(HaSettings settings)
     {
@@ -154,6 +179,21 @@ public sealed partial class HaApiClient : IDisposable
 
             var json = response.Content.ReadAsStringAsync(cts.Token).GetAwaiter().GetResult();
             var entities = ParseStates(json);
+            var areas = LoadAreaMapBestEffort();
+            if (areas is { Count: > 0 })
+            {
+                entities = entities.Select(e => areas.TryGetValue(e.EntityId, out var area)
+                    ? new HaEntity
+                    {
+                        EntityId = e.EntityId,
+                        State = e.State,
+                        Attributes = e.Attributes,
+                        LastChanged = e.LastChanged,
+                        LastUpdated = e.LastUpdated,
+                        AreaName = area,
+                    }
+                    : e).ToList();
+            }
             return new HaQueryResult { Items = entities };
         }
         catch (UriFormatException)
@@ -191,6 +231,95 @@ public sealed partial class HaApiClient : IDisposable
                 ErrorTitle = "Couldn't parse Home Assistant response",
                 ErrorDescription = ex.Message,
             };
+        }
+    }
+
+    // Returns the cached map if fresh, refreshes via POST /api/template
+    // otherwise. Best-effort: any failure (template disabled, parse error,
+    // network blip) resolves to null so the caller continues without areas.
+    private Dictionary<string, string>? LoadAreaMapBestEffort()
+    {
+        lock (_areaCacheLock)
+        {
+            if (_cachedAreaMap is not null && DateTime.UtcNow - _areaCachedAtUtc < AreaCacheTtl)
+            {
+                return _cachedAreaMap;
+            }
+        }
+
+        try
+        {
+            var client = GetClient();
+            using var stream = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(stream))
+            {
+                writer.WriteStartObject();
+                writer.WriteString("template", AreaMapTemplate);
+                writer.WriteEndObject();
+            }
+            using var content = new ByteArrayContent(stream.ToArray());
+            content.Headers.ContentType = new MediaTypeHeaderValue("application/json");
+
+            using var cts = new CancellationTokenSource(DefaultTimeout);
+            var response = client.PostAsync($"{_settings.Url}/api/template", content, cts.Token).GetAwaiter().GetResult();
+            if (!response.IsSuccessStatusCode)
+            {
+                CacheAreas(null);
+                return null;
+            }
+            var raw = response.Content.ReadAsStringAsync(cts.Token).GetAwaiter().GetResult();
+
+            var map = ParseAreaMap(raw);
+            CacheAreas(map);
+            return map;
+        }
+        catch
+        {
+            CacheAreas(null);
+            return null;
+        }
+    }
+
+    private static Dictionary<string, string> ParseAreaMap(string raw)
+    {
+        // /api/template returns the rendered string. HA wraps the body in
+        // JSON quotes some versions, leaves it bare in others — peel one
+        // string layer if present.
+        var trimmed = raw.Trim();
+        if (trimmed.Length >= 2 && trimmed[0] == '"' && trimmed[^1] == '"')
+        {
+            try { trimmed = JsonDocument.Parse(trimmed).RootElement.GetString() ?? trimmed; }
+            catch { /* leave as-is */ }
+        }
+
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (string.IsNullOrWhiteSpace(trimmed) || trimmed == "{ }" || trimmed == "{}") return map;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(trimmed);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return map;
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (prop.Value.ValueKind == JsonValueKind.String)
+                {
+                    var area = prop.Value.GetString();
+                    if (!string.IsNullOrEmpty(area)) map[prop.Name] = area;
+                }
+            }
+        }
+        catch (JsonException) { /* HA returned something we can't parse — fall through to empty */ }
+
+        return map;
+    }
+
+    private void CacheAreas(Dictionary<string, string>? map)
+    {
+        lock (_areaCacheLock)
+        {
+            _cachedAreaMap = map;
+            _areaCachedAtUtc = DateTime.UtcNow;
+            LastAreaCount = map is null ? -1 : map.Count;
         }
     }
 
