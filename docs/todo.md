@@ -87,15 +87,17 @@ remaining domains live in the granular list below.
       rows; Open in Google Maps + Copy user ID context actions
       (picture/HeroImage deferred — needs auth-aware image fetching)
 - [ ] **Weather** — current conditions + forecast (subscribe via WS later)
-- [ ] **Helpers — per-type actions** — today the Helpers page only toggles.
-      Raycast has dedicated actions per helper domain:
+- [x] **Helpers — per-type actions** (non-form-blocked):
       - `input_boolean` — toggle (already covered)
-      - `input_button` — press
-      - `input_select` — pick option submenu from `options`
-      - `input_number` — increment / decrement / set value (form)
-      - `input_text` — set text (form, blocked on CmdPal Form support)
-      - `input_datetime` — set date/time (form, same blocker)
-      - `timer` — start / pause / cancel / finish; show remaining time
+      - `input_button` — press (already covered via Buttons mapping)
+      - `input_select` — "Select option…" submenu of options ≠ current state
+      - `input_number` — Increase / Decrease, gated by `min/max/step`
+      - `timer` — state-aware Start/Pause primary; Restart/Pause/Cancel/Finish
+        in context menu when `editable=true`; details show duration/remaining/finishes_at
+      - `counter` — Increment primary; Decrement / Reset in context menu
+- [ ] **Helpers — form-blocked**: `input_text` (set text), `input_datetime`
+      (set date/time), `input_number` set-to-arbitrary-value. All blocked
+      on CmdPal Form input support.
 
 ### Lights — additional actions to consider
 

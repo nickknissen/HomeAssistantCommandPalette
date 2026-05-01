@@ -167,6 +167,18 @@ internal sealed partial class EntityListPage : ListPage
         {
             AddUpdateRows(entity, meta);
         }
+        else if (entity.Domain == "input_number")
+        {
+            AddInputNumberRows(entity, meta);
+        }
+        else if (entity.Domain == "timer")
+        {
+            AddTimerRows(entity, meta);
+        }
+        else if (entity.Domain == "input_select")
+        {
+            AddInputSelectRows(entity, meta);
+        }
         else if (entity.Domain == "automation")
         {
             AddAutomationRows(entity, meta);
@@ -273,6 +285,46 @@ internal sealed partial class EntityListPage : ListPage
             meta.Add(Row("Effect", fxs));
         }
     }
+
+    private static void AddInputNumberRows(HaEntity entity, List<IDetailsElement> meta)
+    {
+        if (TryGetDouble(entity.Attributes, "min", out var min)) meta.Add(Row("Min", FormatNum(min)));
+        if (TryGetDouble(entity.Attributes, "max", out var max)) meta.Add(Row("Max", FormatNum(max)));
+        if (TryGetDouble(entity.Attributes, "step", out var step)) meta.Add(Row("Step", FormatNum(step)));
+        if (entity.Attributes.TryGetValue("mode", out var mode) && mode is string ms && !string.IsNullOrEmpty(ms))
+        {
+            meta.Add(Row("Mode", ms));
+        }
+    }
+
+    private static void AddTimerRows(HaEntity entity, List<IDetailsElement> meta)
+    {
+        if (entity.Attributes.TryGetValue("duration", out var d) && d is string ds && !string.IsNullOrEmpty(ds))
+        {
+            meta.Add(Row("Duration", ds));
+        }
+        if (entity.Attributes.TryGetValue("remaining", out var r) && r is string rs && !string.IsNullOrEmpty(rs))
+        {
+            meta.Add(Row("Remaining", rs));
+        }
+        if (entity.Attributes.TryGetValue("finishes_at", out var f) && f is string fs && !string.IsNullOrEmpty(fs))
+        {
+            meta.Add(Row("Finishes at", fs));
+        }
+    }
+
+    private static void AddInputSelectRows(HaEntity entity, List<IDetailsElement> meta)
+    {
+        if (entity.Attributes.TryGetValue("options", out var opts) && opts is List<object?> options)
+        {
+            meta.Add(Row("Options", options.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+    }
+
+    private static string FormatNum(double v) =>
+        v == System.Math.Floor(v)
+            ? ((long)v).ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
 
     private static void AddUpdateRows(HaEntity entity, List<IDetailsElement> meta)
     {
@@ -589,6 +641,12 @@ internal sealed partial class EntityListPage : ListPage
                 => string.Equals(entity.State, "cleaning", System.StringComparison.OrdinalIgnoreCase)
                     ? new CallServiceCommand(_client, "vacuum", "pause", entity.EntityId, $"Pause {entity.FriendlyName}", icon: Icons.Pause, onSuccess: OnServiceCallSucceeded)
                     : new CallServiceCommand(_client, "vacuum", "start", entity.EntityId, $"Start {entity.FriendlyName}", icon: Icons.Play, onSuccess: OnServiceCallSucceeded),
+            "timer"
+                => string.Equals(entity.State, "active", System.StringComparison.OrdinalIgnoreCase)
+                    ? new CallServiceCommand(_client, "timer", "pause", entity.EntityId, $"Pause {entity.FriendlyName}", icon: Icons.Pause, onSuccess: OnServiceCallSucceeded)
+                    : new CallServiceCommand(_client, "timer", "start", entity.EntityId, $"Start {entity.FriendlyName}", icon: Icons.Play, onSuccess: OnServiceCallSucceeded),
+            "counter"
+                => new CallServiceCommand(_client, "counter", "increment", entity.EntityId, $"Increment {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded),
             _ => new OpenDashboardCommand(_settings, entity.EntityId),
         };
     }
@@ -1054,6 +1112,95 @@ internal sealed partial class EntityListPage : ListPage
             {
                 items.Add(new CommandContextItem(new OpenUrlCommand(rus) { Name = "Open release notes" }));
             }
+        }
+
+        if (entity.Domain == "input_select")
+        {
+            // "Select option…" submenu — every option except the current
+            // state. Hidden if the entity has no options or is unavailable.
+            if (!string.Equals(entity.State, "unavailable", System.StringComparison.OrdinalIgnoreCase)
+                && entity.Attributes.TryGetValue("options", out var opts) && opts is List<object?> options)
+            {
+                var subItems = options
+                    .OfType<string>()
+                    .Where(o => !string.Equals(o, entity.State, System.StringComparison.Ordinal))
+                    .Select(o => (IContextItem)new CommandContextItem(new CallServiceCommand(
+                        _client, "input_select", "select_option", entity.EntityId,
+                        o, extraData: new Dictionary<string, object?> { ["option"] = o },
+                        onSuccess: OnServiceCallSucceeded)))
+                    .ToArray();
+                if (subItems.Length > 0)
+                {
+                    items.Add(new CommandContextItem(new NoOpCommand())
+                    {
+                        Title = "Select option…",
+                        MoreCommands = subItems,
+                    });
+                }
+            }
+        }
+
+        if (entity.Domain == "input_number")
+        {
+            // input_number.increment / decrement use the entity's own step;
+            // we only need to gate the action when the result would clamp.
+            var hasValue = double.TryParse(entity.State,
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var v);
+            var hasMin = TryGetDouble(entity.Attributes, "min", out var min);
+            var hasMax = TryGetDouble(entity.Attributes, "max", out var max);
+            var hasStep = TryGetDouble(entity.Attributes, "step", out var step);
+
+            if (hasValue && hasStep && (!hasMax || v + step <= max))
+            {
+                items.Add(new CommandContextItem(
+                    new CallServiceCommand(_client, "input_number", "increment", entity.EntityId,
+                        $"Increase {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
+            }
+            if (hasValue && hasStep && (!hasMin || v - step >= min))
+            {
+                items.Add(new CommandContextItem(
+                    new CallServiceCommand(_client, "input_number", "decrement", entity.EntityId,
+                        $"Decrease {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
+            }
+        }
+
+        if (entity.Domain == "timer")
+        {
+            // Mirror Raycast: only act on `editable` timers (HA exposes
+            // start/pause/cancel for code-defined timers too, but they
+            // round-trip via the YAML config — Raycast hides those.)
+            var editable = entity.Attributes.TryGetValue("editable", out var ed) && ed is bool eb && eb;
+            if (editable)
+            {
+                var isActive = string.Equals(entity.State, "active", System.StringComparison.OrdinalIgnoreCase);
+                items.Add(new CommandContextItem(
+                    new CallServiceCommand(_client, "timer", "start", entity.EntityId,
+                        isActive ? $"Restart {entity.FriendlyName}" : $"Start {entity.FriendlyName}",
+                        icon: Icons.Play, onSuccess: OnServiceCallSucceeded)));
+                items.Add(new CommandContextItem(
+                    new CallServiceCommand(_client, "timer", "pause", entity.EntityId,
+                        $"Pause {entity.FriendlyName}", icon: Icons.Pause, onSuccess: OnServiceCallSucceeded)));
+                items.Add(new CommandContextItem(
+                    new CallServiceCommand(_client, "timer", "cancel", entity.EntityId,
+                        $"Cancel {entity.FriendlyName}", icon: Icons.Stop, onSuccess: OnServiceCallSucceeded)));
+                items.Add(new CommandContextItem(
+                    new CallServiceCommand(_client, "timer", "finish", entity.EntityId,
+                        $"Finish {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
+            }
+        }
+
+        if (entity.Domain == "counter")
+        {
+            items.Add(new CommandContextItem(
+                new CallServiceCommand(_client, "counter", "increment", entity.EntityId,
+                    $"Increment {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
+            items.Add(new CommandContextItem(
+                new CallServiceCommand(_client, "counter", "decrement", entity.EntityId,
+                    $"Decrement {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
+            items.Add(new CommandContextItem(
+                new CallServiceCommand(_client, "counter", "reset", entity.EntityId,
+                    $"Reset {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
         }
 
         if (entity.Domain == "person")
