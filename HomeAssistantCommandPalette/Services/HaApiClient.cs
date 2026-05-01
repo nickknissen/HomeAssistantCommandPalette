@@ -100,6 +100,74 @@ public sealed partial class HaApiClient : IDisposable
         => TryCallService(domain, service, entityId, extraData: null, out error);
 
     /// <summary>
+    /// Pings <c>GET /api/config</c> and reports HA's reported version,
+    /// location, time zone, run state and round-trip latency. Used by the
+    /// Connection Check diagnostic page; intentionally avoids the state
+    /// cache so each invocation hits the wire.
+    /// </summary>
+    public HaConfigProbe ProbeConfig()
+    {
+        if (!_settings.IsConfigured)
+        {
+            return new HaConfigProbe(false, HaErrorKind.NotConfigured,
+                "Set the URL and access token in extension settings.",
+                null, null, null, null, 0);
+        }
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var client = GetClient();
+            using var cts = new CancellationTokenSource(DefaultTimeout);
+            var response = client.GetAsync($"{_settings.Url}/api/config", cts.Token).GetAwaiter().GetResult();
+            var elapsed = sw.ElapsedMilliseconds;
+
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                return new HaConfigProbe(false, HaErrorKind.Unauthorized,
+                    "Token rejected (401). Generate a new Long-Lived Access Token under Profile → Security.",
+                    null, null, null, null, elapsed);
+            }
+            if (!response.IsSuccessStatusCode)
+            {
+                return new HaConfigProbe(false, HaErrorKind.NetworkError,
+                    $"HA returned {(int)response.StatusCode} {response.ReasonPhrase}",
+                    null, null, null, null, elapsed);
+            }
+
+            var json = response.Content.ReadAsStringAsync(cts.Token).GetAwaiter().GetResult();
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            string? Read(string name) => root.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
+            return new HaConfigProbe(true, HaErrorKind.None, null,
+                Read("version"), Read("location_name"), Read("time_zone"), Read("state"),
+                elapsed);
+        }
+        catch (UriFormatException)
+        {
+            return new HaConfigProbe(false, HaErrorKind.InvalidUrl,
+                "URL is invalid — must include scheme (http:// or https://).",
+                null, null, null, null, sw.ElapsedMilliseconds);
+        }
+        catch (TaskCanceledException)
+        {
+            return new HaConfigProbe(false, HaErrorKind.NetworkError,
+                $"Request timed out after {DefaultTimeout.TotalSeconds:0}s.",
+                null, null, null, null, sw.ElapsedMilliseconds);
+        }
+        catch (HttpRequestException ex)
+        {
+            return new HaConfigProbe(false, HaErrorKind.NetworkError, ex.Message,
+                null, null, null, null, sw.ElapsedMilliseconds);
+        }
+        catch (JsonException ex)
+        {
+            return new HaConfigProbe(false, HaErrorKind.ParseFailed, ex.Message,
+                null, null, null, null, sw.ElapsedMilliseconds);
+        }
+    }
+
+    /// <summary>
     /// Calls <c>POST /api/services/{domain}/{service}</c> with a body of
     /// <c>{"entity_id": ..., ...extraData}</c>. <paramref name="extraData"/>
     /// values may be string, bool, int / long / double; anything else is

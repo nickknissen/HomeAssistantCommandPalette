@@ -24,3 +24,18 @@ public sealed class HaQueryResult
 
     public bool HasError => ErrorKind != HaErrorKind.None;
 }
+
+/// <summary>
+/// One-shot probe result from <c>GET /api/config</c>. Surfaces HA version,
+/// location, time zone and round-trip latency so the Connection Check page
+/// can render a usable diagnostic without a second round-trip.
+/// </summary>
+public sealed record HaConfigProbe(
+    bool Success,
+    HaErrorKind ErrorKind,
+    string? ErrorMessage,
+    string? Version,
+    string? LocationName,
+    string? TimeZone,
+    string? State,
+    long LatencyMs);
