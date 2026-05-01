@@ -82,7 +82,8 @@ remaining domains live in the granular list below.
 - [ ] Periodic auto-refresh (call `RaiseItemsChanged` on a 3 s timer
       while the camera page is visible — currently snapshots only update
       when CmdPal re-renders the list naturally)
-- [ ] Cleanup pass for stale temp snapshots on extension startup
+- [x] Cleanup pass for stale temp snapshots on extension startup
+      (sweeps camera + picture temp dirs of files older than 1 h)
 - [x] **Persons** — Location (lat/lon), GPS accuracy, Source tracker
       rows; Open in Google Maps + Copy user ID context actions
       (picture/HeroImage deferred — needs auth-aware image fetching)

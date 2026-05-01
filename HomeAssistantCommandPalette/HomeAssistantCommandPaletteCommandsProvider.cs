@@ -72,6 +72,11 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
         _apiClient = new HaApiClient(_settings);
         Settings = _settings.Settings;
 
+        // Sweep camera-snapshot / entity-picture temp files left over from
+        // previous sessions — the in-memory cache reset on restart makes
+        // them unreachable.
+        HaApiClient.CleanupStaleSnapshots();
+
         var commands = new List<ICommandItem>(DomainPages.Length + 1);
 
         foreach (var page in DomainPages)
