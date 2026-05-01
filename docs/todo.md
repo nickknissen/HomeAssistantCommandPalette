@@ -167,8 +167,11 @@ APIs.
       page; consider a status command that shows a count
 - [ ] **Weather** — render `weather.*` entity forecast (current + hourly
       + daily). Daily/hourly come from the WS `weather/subscribe_forecast`.
-- [ ] **Calendar** — `GET /api/calendars` for the list, then
-      `GET /api/calendars/{entity_id}?start=...&end=...` for events
+- [x] **Calendar** — flat upcoming-events page across all calendars,
+      next 7 days, sorted chronologically. Reads `GET /api/calendars`
+      then `GET /api/calendars/{entity_id}?start=...&end=...` per
+      calendar. Renders Today / Tomorrow / weekday + time. Activate
+      copies the event title.
 - [ ] **History / sensor charts** — `GET /api/history/period` for sensor
       values; render as ASCII sparklines in the entity Details pane
 - [ ] **Run Service** — generic free-form service caller (pick domain →

@@ -306,6 +306,198 @@ public sealed partial class HaApiClient : IDisposable
     }
 
     /// <summary>
+    /// Lists configured calendars via <c>GET /api/calendars</c>. Errors map
+    /// to <see cref="HaErrorKind"/> the same way <see cref="GetStates"/>
+    /// does so the calendar page can reuse the "press Enter to open
+    /// settings" flow on auth / config failures.
+    /// </summary>
+    public HaCalendarsResult GetCalendars()
+    {
+        if (!_settings.IsConfigured)
+        {
+            return new HaCalendarsResult
+            {
+                ErrorKind = HaErrorKind.NotConfigured,
+                ErrorTitle = "Home Assistant not configured",
+                ErrorDescription = "Open the extension settings and set the URL and Long-Lived Access Token.",
+            };
+        }
+
+        try
+        {
+            var client = GetClient();
+            using var cts = new CancellationTokenSource(DefaultTimeout);
+            var response = client.GetAsync($"{_settings.Url}/api/calendars", cts.Token).GetAwaiter().GetResult();
+
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                return new HaCalendarsResult
+                {
+                    ErrorKind = HaErrorKind.Unauthorized,
+                    ErrorTitle = "Token rejected",
+                    ErrorDescription = "Generate a new Long-Lived Access Token under Profile → Security.",
+                };
+            }
+            if (!response.IsSuccessStatusCode)
+            {
+                return new HaCalendarsResult
+                {
+                    ErrorKind = HaErrorKind.NetworkError,
+                    ErrorTitle = $"Home Assistant returned {(int)response.StatusCode}",
+                    ErrorDescription = response.ReasonPhrase ?? string.Empty,
+                };
+            }
+
+            var json = response.Content.ReadAsStringAsync(cts.Token).GetAwaiter().GetResult();
+            return new HaCalendarsResult { Calendars = ParseCalendars(json) };
+        }
+        catch (UriFormatException)
+        {
+            return new HaCalendarsResult
+            {
+                ErrorKind = HaErrorKind.InvalidUrl,
+                ErrorTitle = "Home Assistant URL is invalid",
+                ErrorDescription = "Check the URL in extension settings.",
+            };
+        }
+        catch (TaskCanceledException)
+        {
+            return new HaCalendarsResult
+            {
+                ErrorKind = HaErrorKind.NetworkError,
+                ErrorTitle = "Couldn't reach Home Assistant",
+                ErrorDescription = "Request timed out.",
+            };
+        }
+        catch (Exception ex)
+        {
+            return new HaCalendarsResult
+            {
+                ErrorKind = HaErrorKind.NetworkError,
+                ErrorTitle = "Couldn't reach Home Assistant",
+                ErrorDescription = ex.Message,
+            };
+        }
+    }
+
+    /// <summary>
+    /// Fetches events for a calendar between <paramref name="start"/> and
+    /// <paramref name="end"/>. Best-effort: any failure returns an empty
+    /// list so a single broken calendar doesn't take the whole page down.
+    /// </summary>
+    public IReadOnlyList<HaCalendarEvent> GetCalendarEvents(HaCalendar calendar, DateTimeOffset start, DateTimeOffset end)
+    {
+        if (!_settings.IsConfigured) return Array.Empty<HaCalendarEvent>();
+
+        try
+        {
+            var client = GetClient();
+            using var cts = new CancellationTokenSource(DefaultTimeout);
+            // HA expects RFC 3339 / ISO 8601 with offset. The "o" round-trip
+            // format on a UTC DateTimeOffset emits "2025-01-15T19:00:00.0000000+00:00".
+            var startStr = start.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
+            var endStr = end.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
+            var url = $"{_settings.Url}/api/calendars/{Uri.EscapeDataString(calendar.EntityId)}?start={Uri.EscapeDataString(startStr)}&end={Uri.EscapeDataString(endStr)}";
+            var response = client.GetAsync(url, cts.Token).GetAwaiter().GetResult();
+            if (!response.IsSuccessStatusCode) return Array.Empty<HaCalendarEvent>();
+
+            var json = response.Content.ReadAsStringAsync(cts.Token).GetAwaiter().GetResult();
+            return ParseCalendarEvents(json, calendar);
+        }
+        catch
+        {
+            return Array.Empty<HaCalendarEvent>();
+        }
+    }
+
+    private static IReadOnlyList<HaCalendar> ParseCalendars(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.ValueKind != JsonValueKind.Array) return Array.Empty<HaCalendar>();
+        var list = new List<HaCalendar>();
+        foreach (var el in doc.RootElement.EnumerateArray())
+        {
+            if (el.ValueKind != JsonValueKind.Object) continue;
+            var entityId = el.TryGetProperty("entity_id", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null;
+            if (string.IsNullOrEmpty(entityId)) continue;
+            var name = el.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() ?? entityId : entityId;
+            list.Add(new HaCalendar(entityId, name));
+        }
+        return list;
+    }
+
+    private static IReadOnlyList<HaCalendarEvent> ParseCalendarEvents(string json, HaCalendar calendar)
+    {
+        using var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.ValueKind != JsonValueKind.Array) return Array.Empty<HaCalendarEvent>();
+        var list = new List<HaCalendarEvent>();
+        foreach (var el in doc.RootElement.EnumerateArray())
+        {
+            if (el.ValueKind != JsonValueKind.Object) continue;
+            var summary = el.TryGetProperty("summary", out var s) && s.ValueKind == JsonValueKind.String ? s.GetString() ?? "(no title)" : "(no title)";
+            if (!TryReadCalendarTime(el, "start", out var start, out var startAllDay)) continue;
+            if (!TryReadCalendarTime(el, "end", out var end, out _)) end = start;
+            var description = el.TryGetProperty("description", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : null;
+            var location = el.TryGetProperty("location", out var l) && l.ValueKind == JsonValueKind.String ? l.GetString() : null;
+            list.Add(new HaCalendarEvent(
+                calendar.EntityId, calendar.Name, summary, start, end, startAllDay,
+                string.IsNullOrEmpty(description) ? null : description,
+                string.IsNullOrEmpty(location) ? null : location));
+        }
+        return list;
+    }
+
+    // HA has shipped two on-the-wire shapes for calendar event times:
+    //   1. Newer REST: a flat ISO string ("2025-01-15T19:00:00+00:00" or
+    //      "2025-01-15" for all-day events).
+    //   2. Older / WS-derived: an object {"dateTime": "..."} or {"date": "..."}.
+    // Accept both.
+    private static bool TryReadCalendarTime(JsonElement parent, string key, out DateTimeOffset value, out bool allDay)
+    {
+        value = default;
+        allDay = false;
+        if (!parent.TryGetProperty(key, out var prop)) return false;
+
+        string? raw = null;
+        if (prop.ValueKind == JsonValueKind.String)
+        {
+            raw = prop.GetString();
+            allDay = raw is { Length: > 0 } && !raw.Contains('T');
+        }
+        else if (prop.ValueKind == JsonValueKind.Object)
+        {
+            if (prop.TryGetProperty("dateTime", out var dt) && dt.ValueKind == JsonValueKind.String)
+            {
+                raw = dt.GetString();
+            }
+            else if (prop.TryGetProperty("date", out var d) && d.ValueKind == JsonValueKind.String)
+            {
+                raw = d.GetString();
+                allDay = true;
+            }
+        }
+        if (string.IsNullOrEmpty(raw)) return false;
+
+        if (allDay)
+        {
+            // "2025-01-15" — parse as a local-day boundary at 00:00.
+            if (DateTime.TryParseExact(raw, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d))
+            {
+                value = new DateTimeOffset(d, TimeZoneInfo.Local.GetUtcOffset(d));
+                return true;
+            }
+            return false;
+        }
+
+        if (DateTimeOffset.TryParse(raw, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var dto))
+        {
+            value = dto;
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Pings <c>GET /api/config</c> and reports HA's reported version,
     /// location, time zone, run state and round-trip latency. Used by the
     /// Connection Check diagnostic page; intentionally avoids the state

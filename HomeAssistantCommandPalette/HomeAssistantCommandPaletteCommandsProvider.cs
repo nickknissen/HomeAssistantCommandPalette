@@ -98,6 +98,13 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
             Icon = Icons.App,
         });
 
+        commands.Add(new CommandItem(new CalendarPage(_settings, _apiClient))
+        {
+            Title = "Calendar",
+            Subtitle = "Home Assistant",
+            Icon = Icons.InputDate,
+        });
+
         commands.Add(new CommandItem(new ConnectionCheckPage(_settings, _apiClient))
         {
             Title = "Connection Check",
