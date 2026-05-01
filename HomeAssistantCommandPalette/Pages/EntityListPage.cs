@@ -120,6 +120,10 @@ internal sealed partial class EntityListPage : ListPage
         {
             AddCoverRows(entity, meta);
         }
+        else if (entity.Domain == "media_player")
+        {
+            AddMediaPlayerRows(entity, meta);
+        }
 
         if (!string.IsNullOrEmpty(entity.AreaName))
         {
@@ -156,6 +160,43 @@ internal sealed partial class EntityListPage : ListPage
         if (entity.Attributes.TryGetValue("effect", out var fx) && fx is string fxs && !string.IsNullOrEmpty(fxs) && !string.Equals(fxs, "none", System.StringComparison.OrdinalIgnoreCase))
         {
             meta.Add(Row("Effect", fxs));
+        }
+    }
+
+    private static void AddMediaPlayerRows(HaEntity entity, List<IDetailsElement> meta)
+    {
+        if (entity.Attributes.TryGetValue("media_title", out var title) && title is string ts && !string.IsNullOrEmpty(ts))
+        {
+            meta.Add(Row("Track", ts));
+        }
+        if (entity.Attributes.TryGetValue("media_artist", out var artist) && artist is string ars && !string.IsNullOrEmpty(ars))
+        {
+            meta.Add(Row("Artist", ars));
+        }
+        if (entity.Attributes.TryGetValue("media_album_name", out var album) && album is string als && !string.IsNullOrEmpty(als))
+        {
+            meta.Add(Row("Album", als));
+        }
+        if (entity.Attributes.TryGetValue("source", out var source) && source is string src && !string.IsNullOrEmpty(src))
+        {
+            meta.Add(Row("Source", src));
+        }
+        // volume_level is 0.0..1.0
+        if (entity.Attributes.TryGetValue("volume_level", out var vol) && vol is double v)
+        {
+            meta.Add(Row("Volume", $"{(int)System.Math.Round(v * 100)}%"));
+        }
+        else if (entity.Attributes.TryGetValue("volume_level", out var vol2) && vol2 is long lv)
+        {
+            meta.Add(Row("Volume", $"{lv * 100}%"));
+        }
+        if (entity.Attributes.TryGetValue("is_volume_muted", out var muted) && muted is bool m)
+        {
+            meta.Add(Row("Muted", m ? "yes" : "no"));
+        }
+        if (entity.Attributes.TryGetValue("app_name", out var app) && app is string apps && !string.IsNullOrEmpty(apps))
+        {
+            meta.Add(Row("App", apps));
         }
     }
 
@@ -210,6 +251,14 @@ internal sealed partial class EntityListPage : ListPage
             };
         }
 
+        if (entity.Domain == "media_player")
+        {
+            if (unavailable) return Icons.MediaPlayerUnavailable;
+            return string.Equals(entity.State, "playing", System.StringComparison.OrdinalIgnoreCase)
+                ? Icons.MediaPlayerPlaying
+                : Icons.MediaPlayerIdle;
+        }
+
         return Icons.App;
     }
 
@@ -253,6 +302,18 @@ internal sealed partial class EntityListPage : ListPage
             extraData: new Dictionary<string, object?> { ["position"] = position },
             onSuccess: OnServiceCallSucceeded));
 
+    private CommandContextItem VolumePreset(HaEntity entity, int pct) =>
+        new(new CallServiceCommand(
+            _client,
+            domain: "media_player",
+            service: "volume_set",
+            entityId: entity.EntityId,
+            displayName: $"{pct}%",
+            icon: Icons.Volume,
+            // volume_level wants 0.0..1.0 — convert from percentage.
+            extraData: new Dictionary<string, object?> { ["volume_level"] = pct / 100.0 },
+            onSuccess: OnServiceCallSucceeded));
+
     private IContextItem[] BuildContextCommands(HaEntity entity)
     {
         var items = new List<IContextItem>(8);
@@ -284,6 +345,61 @@ internal sealed partial class EntityListPage : ListPage
                 Icon = Icons.Brightness,
                 MoreCommands = presets,
             });
+        }
+
+        if (entity.Domain == "media_player")
+        {
+            items.Add(new CommandContextItem(
+                new CallServiceCommand(_client, "media_player", "media_play_pause", entity.EntityId, $"Play / Pause {entity.FriendlyName}", icon: Icons.PlayPause, onSuccess: OnServiceCallSucceeded)));
+            items.Add(new CommandContextItem(
+                new CallServiceCommand(_client, "media_player", "media_play", entity.EntityId, $"Play {entity.FriendlyName}", icon: Icons.Play, onSuccess: OnServiceCallSucceeded)));
+            items.Add(new CommandContextItem(
+                new CallServiceCommand(_client, "media_player", "media_pause", entity.EntityId, $"Pause {entity.FriendlyName}", icon: Icons.Pause, onSuccess: OnServiceCallSucceeded)));
+            items.Add(new CommandContextItem(
+                new CallServiceCommand(_client, "media_player", "media_stop", entity.EntityId, $"Stop {entity.FriendlyName}", icon: Icons.Stop, onSuccess: OnServiceCallSucceeded)));
+            items.Add(new CommandContextItem(
+                new CallServiceCommand(_client, "media_player", "media_next_track", entity.EntityId, $"Next track on {entity.FriendlyName}", icon: Icons.Next, onSuccess: OnServiceCallSucceeded)));
+            items.Add(new CommandContextItem(
+                new CallServiceCommand(_client, "media_player", "media_previous_track", entity.EntityId, $"Previous track on {entity.FriendlyName}", icon: Icons.Previous, onSuccess: OnServiceCallSucceeded)));
+            items.Add(new CommandContextItem(
+                new CallServiceCommand(_client, "media_player", "volume_up", entity.EntityId, $"Volume up on {entity.FriendlyName}", icon: Icons.VolumeUp, onSuccess: OnServiceCallSucceeded)));
+            items.Add(new CommandContextItem(
+                new CallServiceCommand(_client, "media_player", "volume_down", entity.EntityId, $"Volume down on {entity.FriendlyName}", icon: Icons.VolumeDown, onSuccess: OnServiceCallSucceeded)));
+
+            // Mute toggle — read current is_volume_muted to flip it. Skip if
+            // unknown (not all media_players publish the attribute).
+            if (entity.Attributes.TryGetValue("is_volume_muted", out var muted) && muted is bool isMuted)
+            {
+                items.Add(new CommandContextItem(
+                    new CallServiceCommand(
+                        _client,
+                        domain: "media_player",
+                        service: "volume_mute",
+                        entityId: entity.EntityId,
+                        displayName: isMuted ? $"Unmute {entity.FriendlyName}" : $"Mute {entity.FriendlyName}",
+                        icon: Icons.VolumeMute,
+                        extraData: new Dictionary<string, object?> { ["is_volume_muted"] = !isMuted },
+                        onSuccess: OnServiceCallSucceeded)));
+            }
+
+            // Volume presets — only when the entity supports volume_set.
+            // supported_features bit 4 (value 4) = VOLUME_SET on media_player.
+            if (entity.Attributes.TryGetValue("supported_features", out var sf) && sf is long bits && (bits & 4) == 4)
+            {
+                var presets = new IContextItem[]
+                {
+                    VolumePreset(entity, 25),
+                    VolumePreset(entity, 50),
+                    VolumePreset(entity, 75),
+                    VolumePreset(entity, 100),
+                };
+                items.Add(new CommandContextItem(new NoOpCommand())
+                {
+                    Title = "Set volume…",
+                    Icon = Icons.Volume,
+                    MoreCommands = presets,
+                });
+            }
         }
 
         if (entity.Domain == "cover")
