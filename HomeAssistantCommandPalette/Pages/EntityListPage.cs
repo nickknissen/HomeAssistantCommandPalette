@@ -578,6 +578,16 @@ internal sealed partial class EntityListPage : ListPage
             var v = tt switch { double d => $"{d}°", long l => $"{l}°", _ => null };
             if (v is not null) meta.Add(Row("Target temp", v));
         }
+        // Min / max range — only if both are reported.
+        var min = entity.Attributes.TryGetValue("min_temp", out var mn) ? mn : null;
+        var max = entity.Attributes.TryGetValue("max_temp", out var mx) ? mx : null;
+        static string? FormatTemp(object? o) => o switch { double d => $"{d}°", long l => $"{l}°", _ => null };
+        var minStr = FormatTemp(min);
+        var maxStr = FormatTemp(max);
+        if (minStr is not null && maxStr is not null)
+        {
+            meta.Add(Row("Range", $"{minStr} – {maxStr}"));
+        }
         if (entity.Attributes.TryGetValue("current_humidity", out var ch))
         {
             var v = ch switch { double d => $"{(int)d}%", long l => $"{l}%", _ => null };
@@ -590,6 +600,10 @@ internal sealed partial class EntityListPage : ListPage
         if (entity.Attributes.TryGetValue("fan_mode", out var fm) && fm is string fms && !string.IsNullOrEmpty(fms))
         {
             meta.Add(Row("Fan", fms));
+        }
+        if (entity.Attributes.TryGetValue("swing_mode", out var swm) && swm is string swms && !string.IsNullOrEmpty(swms))
+        {
+            meta.Add(Row("Swing", swms));
         }
         if (entity.Attributes.TryGetValue("preset_mode", out var pm) && pm is string pms && !string.IsNullOrEmpty(pms))
         {
@@ -1002,6 +1016,16 @@ internal sealed partial class EntityListPage : ListPage
             extraData: new Dictionary<string, object?> { ["fan_mode"] = mode },
             onSuccess: OnServiceCallSucceeded));
 
+    private CommandContextItem SwingModeItem(HaEntity entity, string mode) =>
+        new(new CallServiceCommand(
+            _client,
+            domain: "climate",
+            service: "set_swing_mode",
+            entityId: entity.EntityId,
+            displayName: mode,
+            extraData: new Dictionary<string, object?> { ["swing_mode"] = mode },
+            onSuccess: OnServiceCallSucceeded));
+
     private static double GetCurrentTargetTemp(HaEntity entity)
     {
         if (!entity.Attributes.TryGetValue("temperature", out var t)) return double.NaN;
@@ -1326,6 +1350,24 @@ internal sealed partial class EntityListPage : ListPage
                     items.Add(new CommandContextItem(new NoOpCommand())
                     {
                         Title = "Set fan mode…",
+                        Icon = Icons.Fan,
+                        MoreCommands = modeItems,
+                    });
+                }
+            }
+
+            // Swing mode submenu — same pattern, using swing_modes attribute.
+            if (entity.Attributes.TryGetValue("swing_modes", out var sw) && sw is List<object?> swingModes)
+            {
+                var modeItems = swingModes
+                    .OfType<string>()
+                    .Select(m => (IContextItem)SwingModeItem(entity, m))
+                    .ToArray();
+                if (modeItems.Length > 0)
+                {
+                    items.Add(new CommandContextItem(new NoOpCommand())
+                    {
+                        Title = "Set swing mode…",
                         Icon = Icons.Fan,
                         MoreCommands = modeItems,
                     });
