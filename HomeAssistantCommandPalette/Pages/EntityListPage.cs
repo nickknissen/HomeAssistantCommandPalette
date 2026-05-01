@@ -133,6 +133,10 @@ internal sealed partial class EntityListPage : ListPage
         {
             AddVacuumRows(entity, meta);
         }
+        else if (entity.Domain == "fan")
+        {
+            AddFanRows(entity, meta);
+        }
         else if (entity.Domain == "automation")
         {
             AddAutomationRows(entity, meta);
@@ -221,6 +225,27 @@ internal sealed partial class EntityListPage : ListPage
         if (entity.Attributes.TryGetValue("effect", out var fx) && fx is string fxs && !string.IsNullOrEmpty(fxs) && !string.Equals(fxs, "none", System.StringComparison.OrdinalIgnoreCase))
         {
             meta.Add(Row("Effect", fxs));
+        }
+    }
+
+    private static void AddFanRows(HaEntity entity, List<IDetailsElement> meta)
+    {
+        if (entity.Attributes.TryGetValue("percentage", out var pct))
+        {
+            var v = pct switch { long l => $"{l}%", double d => $"{(int)d}%", _ => null };
+            if (v is not null) meta.Add(Row("Speed", v));
+        }
+        if (entity.Attributes.TryGetValue("preset_mode", out var pm) && pm is string pms && !string.IsNullOrEmpty(pms))
+        {
+            meta.Add(Row("Preset", pms));
+        }
+        if (entity.Attributes.TryGetValue("oscillating", out var osc) && osc is bool b)
+        {
+            meta.Add(Row("Oscillating", b ? "yes" : "no"));
+        }
+        if (entity.Attributes.TryGetValue("direction", out var dir) && dir is string dirs && !string.IsNullOrEmpty(dirs))
+        {
+            meta.Add(Row("Direction", dirs));
         }
     }
 
@@ -423,6 +448,12 @@ internal sealed partial class EntityListPage : ListPage
             return entity.IsOn ? Icons.AutomationOn : Icons.AutomationOff;
         }
 
+        if (entity.Domain == "fan")
+        {
+            if (unavailable) return Icons.FanUnavailable;
+            return entity.IsOn ? Icons.FanOn : Icons.FanOff;
+        }
+
         return Icons.App;
     }
 
@@ -480,6 +511,19 @@ internal sealed partial class EntityListPage : ListPage
             icon: Icons.Volume,
             // volume_level wants 0.0..1.0 — convert from percentage.
             extraData: new Dictionary<string, object?> { ["volume_level"] = pct / 100.0 },
+            onSuccess: OnServiceCallSucceeded));
+
+    private CommandContextItem FanSpeedPreset(HaEntity entity, int pct) =>
+        new(new CallServiceCommand(
+            _client,
+            domain: "fan",
+            // turn_on with percentage starts the fan if it was off (matches
+            // Raycast behaviour and avoids a no-op when state="off").
+            service: "turn_on",
+            entityId: entity.EntityId,
+            displayName: $"{pct}%",
+            icon: Icons.Fan,
+            extraData: new Dictionary<string, object?> { ["percentage"] = pct },
             onSuccess: OnServiceCallSucceeded));
 
     private CommandContextItem TemperaturePreset(HaEntity entity, double temp) =>
@@ -574,6 +618,59 @@ internal sealed partial class EntityListPage : ListPage
                 Icon = Icons.Brightness,
                 MoreCommands = presets,
             });
+        }
+
+        if (entity.Domain == "fan")
+        {
+            // Gate speed actions by SET_SPEED bit (1) when supported_features
+            // is reported. If the attribute is missing, optimistically allow.
+            var sf = entity.Attributes.TryGetValue("supported_features", out var sfo) && sfo is long b ? b : -1;
+            var supportsSpeed = sf < 0 || (sf & 1) == 1;
+
+            if (supportsSpeed)
+            {
+                // Speed up / down — single step from current percentage.
+                // Skip when the device doesn't publish percentage_step or
+                // when the resulting value would clamp out of range.
+                var currentPct = entity.Attributes.TryGetValue("percentage", out var pv) ? pv switch { long l => (double)l, double d => d, _ => double.NaN } : double.NaN;
+                var step = entity.Attributes.TryGetValue("percentage_step", out var sv) ? sv switch { long l => (double)l, double d => d, _ => double.NaN } : double.NaN;
+                if (!double.IsNaN(currentPct) && !double.IsNaN(step) && step > 0)
+                {
+                    var up = (int)System.Math.Round(currentPct + step);
+                    var down = (int)System.Math.Round(currentPct - step);
+                    if (up <= 100)
+                    {
+                        items.Add(new CommandContextItem(
+                            new CallServiceCommand(_client, "fan", "turn_on", entity.EntityId, $"Speed up to {up}%", icon: Icons.Fan,
+                                extraData: new Dictionary<string, object?> { ["percentage"] = up },
+                                onSuccess: OnServiceCallSucceeded)));
+                    }
+                    if (down >= 0)
+                    {
+                        items.Add(new CommandContextItem(
+                            new CallServiceCommand(_client, "fan", "turn_on", entity.EntityId, $"Speed down to {down}%", icon: Icons.Fan,
+                                extraData: new Dictionary<string, object?> { ["percentage"] = down },
+                                onSuccess: OnServiceCallSucceeded)));
+                    }
+                }
+
+                // Set speed presets — mirrors lights' brightness shape.
+                // 0% is intentionally omitted because Turn Off already
+                // exists at the top of the menu.
+                var presets = new IContextItem[]
+                {
+                    FanSpeedPreset(entity, 25),
+                    FanSpeedPreset(entity, 50),
+                    FanSpeedPreset(entity, 75),
+                    FanSpeedPreset(entity, 100),
+                };
+                items.Add(new CommandContextItem(new NoOpCommand())
+                {
+                    Title = "Set speed…",
+                    Icon = Icons.Fan,
+                    MoreCommands = presets,
+                });
+            }
         }
 
         if (entity.Domain == "media_player")

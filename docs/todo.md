@@ -62,8 +62,10 @@ remaining domains live in the granular list below.
       from `fan_speed_list`; all gated by `supported_features` bits
 - [x] **Automations** — Trigger context item alongside Toggle / Turn on
       / Turn off; state-tinted `robot.svg`
-- [ ] **Fans** — speed presets via `percentage` (mirrors lights'
-      brightness shape)
+- [x] **Fans** — state-tinted icon, "Set speed…" presets (25/50/75/100),
+      Speed up / Speed down stepped from `percentage_step`, gated by
+      SET_SPEED bit; details rows for percentage / preset_mode /
+      oscillating / direction
 - [ ] **Updates** — Install button gated by `supported_features`; Skip;
       version (current → latest); release notes link
 - [ ] **Scripts** — input form for scripts that take `fields` parameters
