@@ -111,9 +111,9 @@ remaining domains live in the granular list below.
 
 ### Media players — additional actions to consider
 
-- [ ] Position / Duration formatted `MM:SS / MM:SS` (parse
-      `media_position` + `media_position_updated_at` to advance position
-      client-side)
+- [x] Position / Duration formatted `MM:SS / MM:SS` (advances client-side
+      from `media_position_updated_at` while playing; switches to `H:MM:SS`
+      for tracks ≥ 1 h)
 - [x] Shuffle on/off (gated by SHUFFLE_SET, label flips with current `shuffle`)
 - [x] Repeat (off / one / all) (gated by REPEAT_SET)
 - [x] Sound mode + sound mode submenu when `sound_mode_list` is present

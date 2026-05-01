@@ -612,6 +612,25 @@ internal sealed partial class EntityListPage : ListPage
         return m == 0 ? $"{h}h" : $"{h}h {m}m";
     }
 
+    private static double? TryGetSeconds(IReadOnlyDictionary<string, object?> attrs, string key) =>
+        attrs.TryGetValue(key, out var v)
+            ? v switch { double d => d, long l => (double)l, _ => (double?)null }
+            : null;
+
+    /// <summary>
+    /// Renders a duration in seconds as MM:SS, or H:MM:SS when ≥ 1 hour.
+    /// </summary>
+    private static string FormatTimecode(double totalSeconds)
+    {
+        var s = (long)System.Math.Round(totalSeconds);
+        var hours = s / 3600;
+        var minutes = (s % 3600) / 60;
+        var seconds = s % 60;
+        return hours > 0
+            ? $"{hours}:{minutes:D2}:{seconds:D2}"
+            : $"{minutes}:{seconds:D2}";
+    }
+
     private static void AddClimateRows(HaEntity entity, List<IDetailsElement> meta)
     {
         if (entity.Attributes.TryGetValue("current_temperature", out var ct))
@@ -682,6 +701,25 @@ internal sealed partial class EntityListPage : ListPage
         if (entity.Attributes.TryGetValue("media_album_name", out var album) && album is string als && !string.IsNullOrEmpty(als))
         {
             meta.Add(Row("Album", als));
+        }
+        // Position / Duration as MM:SS — when state="playing", advance the
+        // reported position by (now - media_position_updated_at) so the row
+        // doesn't lag the actual playback by the full list-cache window.
+        var posSeconds = TryGetSeconds(entity.Attributes, "media_position");
+        var durSeconds = TryGetSeconds(entity.Attributes, "media_duration");
+        if (posSeconds is double pos && durSeconds is double dur && dur > 0)
+        {
+            if (string.Equals(entity.State, "playing", System.StringComparison.OrdinalIgnoreCase)
+                && entity.Attributes.TryGetValue("media_position_updated_at", out var puat)
+                && puat is string puatS
+                && System.DateTimeOffset.TryParse(puatS, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var updated))
+            {
+                var elapsed = (System.DateTimeOffset.UtcNow - updated).TotalSeconds;
+                if (elapsed > 0) pos += elapsed;
+            }
+            if (pos < 0) pos = 0;
+            if (pos > dur) pos = dur;
+            meta.Add(Row("Position", $"{FormatTimecode(pos)} / {FormatTimecode(dur)}"));
         }
         if (entity.Attributes.TryGetValue("source", out var source) && source is string src && !string.IsNullOrEmpty(src))
         {
