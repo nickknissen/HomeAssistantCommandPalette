@@ -155,8 +155,14 @@ internal static class Icons
         var on = string.Equals(state, "on", System.StringComparison.OrdinalIgnoreCase);
         return domain switch
         {
-            "switch" => unavailable ? SwitchUnavailable : on ? SwitchOn : SwitchOff,
-            _ => unavailable ? ShapeUnavailable : Shape,
+            "switch"        => unavailable ? SwitchUnavailable        : on ? SwitchOn        : SwitchOff,
+            "input_boolean" => unavailable ? InputBooleanUnavailable  : on ? InputBooleanOn  : InputBooleanOff,
+            "script"        => unavailable ? ScriptUnavailable        : on ? ScriptOn        : ScriptOff,
+            "scene"         => unavailable ? SceneUnavailable         : Scene,
+            "button"        => unavailable ? ButtonUnavailable        : Button,
+            "input_button"  => InputButton,
+            "counter"       => unavailable ? CounterUnavailable       : Counter,
+            _               => unavailable ? ShapeUnavailable         : Shape,
         };
     }
 

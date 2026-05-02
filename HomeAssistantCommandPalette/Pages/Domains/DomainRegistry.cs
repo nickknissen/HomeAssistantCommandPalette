@@ -18,7 +18,14 @@ public static class DomainRegistry
     private static readonly Dictionary<string, DomainBehavior> Map =
         new(StringComparer.Ordinal)
         {
-            ["switch"] = Domains.Toggle("switch"),
+            ["switch"]        = Domains.Toggle("switch"),
+            ["input_boolean"] = Domains.Toggle("input_boolean"),
+            ["group"]         = Domains.Toggle("group"),
+            ["scene"]         = Domains.Activate("scene", "turn_on", "Activate"),
+            ["script"]        = Domains.Activate("script", "turn_on", "Run"),
+            ["button"]        = Domains.Activate("button", "press", "Press"),
+            ["input_button"]  = Domains.Activate("input_button", "press", "Press"),
+            ["counter"]       = Domains.Increment("counter"),
         };
 
     /// <summary>
