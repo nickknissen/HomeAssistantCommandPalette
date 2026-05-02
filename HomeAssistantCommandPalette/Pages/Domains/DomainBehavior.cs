@@ -16,7 +16,7 @@ namespace HomeAssistantCommandPalette.Pages.Domains;
 /// virtuals on this base with safe defaults so non-overriding domains pay
 /// nothing.
 /// </remarks>
-internal abstract class DomainBehavior
+public abstract class DomainBehavior
 {
     /// <summary>The HA domain this behavior handles (e.g. <c>"light"</c>).</summary>
     public abstract string Domain { get; }
@@ -43,10 +43,13 @@ internal abstract class DomainBehavior
     public virtual void AddContextItems(in DomainCtx ctx, List<IContextItem> items) { }
 
     /// <summary>
-    /// State-tinted icon for the row. Default returns the generic shape
-    /// glyph; concrete behaviors override with their domain icons.
+    /// State-tinted icon for the row. Default delegates to
+    /// <see cref="Icons.ForDomain(string, string)"/>; concrete behaviors
+    /// override when they need richer rules (sub-state palettes,
+    /// device_class dispatch, supported_features gating, …).
     /// </summary>
-    public virtual IconInfo BuildIcon(in DomainCtx ctx) => Icons.Shape;
+    public virtual IconInfo BuildIcon(in DomainCtx ctx)
+        => Icons.ForDomain(ctx.Entity.Domain, ctx.Entity.State);
 
     /// <summary>
     /// Hero image for the details pane (e.g. camera snapshot). Returns
