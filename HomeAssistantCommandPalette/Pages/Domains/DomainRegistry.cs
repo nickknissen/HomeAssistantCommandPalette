@@ -39,6 +39,8 @@ public static class DomainRegistry
             ["light"]         = new LightBehavior(),
             ["climate"]       = new ClimateBehavior(),
             ["media_player"]  = new MediaPlayerBehavior(),
+            ["camera"]        = new CameraBehavior(),
+            ["weather"]       = new WeatherBehavior(),
         };
 
     /// <summary>
