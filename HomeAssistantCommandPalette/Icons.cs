@@ -163,10 +163,12 @@ internal static class Icons
             "button"        => unavailable ? ButtonUnavailable        : Button,
             "input_button"  => InputButton,
             "counter"       => unavailable ? CounterUnavailable       : Counter,
+            // Always-blue helper domains.
+            "zone"          => unavailable ? ZoneUnavailable          : Zone,
+            "input_text"    => InputText,
             // Behaviors with sub-state palettes (vacuum/timer/automation/
-            // update/person) override BuildIcon directly; their entries
-            // here are unreachable but kept for symmetry / fallback when
-            // a behavior is unregistered.
+            // update/person/light/cover/fan/climate/media_player) override
+            // BuildIcon directly; their entries don't route through here.
             _               => unavailable ? ShapeUnavailable         : Shape,
         };
     }
