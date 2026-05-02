@@ -34,11 +34,12 @@ internal sealed partial class ConnectionCheckPage : ListPage
         var probe = _client.ProbeConfig();
         var items = new List<IListItem>(8);
 
+        items.Add(Row("Extension version", AppReleaseInfo.DisplayVersion, Icons.App));
         items.Add(Row("Status", FormatStatus(probe), Icons.App));
         items.Add(Row("URL", string.IsNullOrEmpty(_settings.Url) ? "(not set)" : _settings.Url, Icons.Home));
         if (probe.Success)
         {
-            if (!string.IsNullOrEmpty(probe.Version)) items.Add(Row("Version", probe.Version!, Icons.App));
+            if (!string.IsNullOrEmpty(probe.Version)) items.Add(Row("Home Assistant version", probe.Version!, Icons.App));
             if (!string.IsNullOrEmpty(probe.LocationName)) items.Add(Row("Location", probe.LocationName!, Icons.Home));
             if (!string.IsNullOrEmpty(probe.TimeZone)) items.Add(Row("Time zone", probe.TimeZone!, Icons.App));
             if (!string.IsNullOrEmpty(probe.State)) items.Add(Row("Run state", probe.State!, Icons.App));
