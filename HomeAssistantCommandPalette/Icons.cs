@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Microsoft.CommandPalette.Extensions.Toolkit;
 
 namespace HomeAssistantCommandPalette;
@@ -168,6 +169,91 @@ internal static class Icons
             // a behavior is unregistered.
             _               => unavailable ? ShapeUnavailable         : Shape,
         };
+    }
+
+    /// <summary>
+    /// Picks a sensor / binary_sensor icon based on the entity's
+    /// <c>device_class</c>. Binary sensors carry on/off state for door /
+    /// window / motion / connectivity / plug; numeric sensors are
+    /// always-blue. Battery uses <see cref="BatteryForLevel"/> when the
+    /// state parses as a percentage.
+    /// </summary>
+    public static IconInfo ForSensorDeviceClass(string domain, string state, IReadOnlyDictionary<string, object?> attributes)
+    {
+        var unavailable = string.Equals(state, "unavailable", System.StringComparison.OrdinalIgnoreCase);
+        var on = string.Equals(state, "on", System.StringComparison.OrdinalIgnoreCase);
+        var dc = attributes.TryGetValue("device_class", out var raw) && raw is string s ? s : null;
+
+        // binary_sensor — yellow when detected/open/connected, blue when
+        // clear, grey when unavailable.
+        if (string.Equals(domain, "binary_sensor", System.StringComparison.Ordinal))
+        {
+            switch (dc)
+            {
+                case "door":
+                case "garage_door":
+                    if (unavailable) return DoorUnavailable;
+                    return on ? DoorOpen : DoorClosed;
+                case "window":
+                case "opening":
+                    if (unavailable) return WindowUnavailable;
+                    return on ? WindowOpen : WindowClosed;
+                case "motion":
+                case "occupancy":
+                case "presence":
+                case "moving":
+                    if (unavailable) return MotionUnavailable;
+                    return on ? MotionDetected : MotionClear;
+                case "connectivity":
+                    if (unavailable) return ConnectivityUnavailable;
+                    return on ? ConnectivityOn : ConnectivityOff;
+                case "plug":
+                case "power":
+                    if (unavailable) return PlugUnavailable;
+                    return on ? PlugOn : PlugOff;
+                case "update":
+                    if (unavailable) return UpdateUnavailable;
+                    return on ? UpdateOn : UpdateOff;
+            }
+        }
+
+        // sensor — always-blue icons keyed off device_class. Battery uses
+        // a dedicated icon set; the rest fall through to a generic shape
+        // when the device_class is missing or unrecognized.
+        switch (dc)
+        {
+            case "battery":
+                // Charge level drives both shape (10% buckets) and tint
+                // (red ≤ 20, yellow ≤ 30, blue otherwise). When the state
+                // doesn't parse as a number we keep the static fallback.
+                if (double.TryParse(state,
+                        System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var pct))
+                {
+                    return BatteryForLevel(pct, unavailable);
+                }
+                return unavailable ? BatteryUnavailable : Battery;
+            case "temperature":
+                return unavailable ? TemperatureUnavailable : Temperature;
+            case "humidity":
+            case "moisture":
+                return unavailable ? HumidityUnavailable : Humidity;
+            case "pressure":
+            case "atmospheric_pressure":
+                return unavailable ? PressureUnavailable : Pressure;
+            case "energy":
+            case "power":
+            case "current":
+            case "voltage":
+            case "apparent_power":
+                return unavailable ? EnergyUnavailable : Energy;
+            case "power_factor":
+                return unavailable ? PowerFactorUnavailable : PowerFactor;
+            case "carbon_dioxide":
+                return unavailable ? CarbonDioxideUnavailable : CarbonDioxide;
+        }
+
+        return unavailable ? ShapeUnavailable : Shape;
     }
 
     /// <summary>
