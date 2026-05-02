@@ -1,18 +1,22 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.13.35507.96 d17.13
+VisualStudioVersion = 17.13.35507.96
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HomeAssistantCommandPalette", "HomeAssistantCommandPalette\HomeAssistantCommandPalette.csproj", "{9D064508-66B7-4A88-AC58-08FD799BC0F0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HomeAssistantCommandPalette.Tests", "HomeAssistantCommandPalette.Tests\HomeAssistantCommandPalette.Tests.csproj", "{64C66D09-920A-4419-AC5D-F35A75812C2C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|ARM64 = Debug|ARM64
 		Debug|x64 = Debug|x64
 		Debug|x86 = Debug|x86
+		Debug|Any CPU = Debug|Any CPU
 		Release|ARM64 = Release|ARM64
 		Release|x64 = Release|x64
 		Release|x86 = Release|x86
+		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{9D064508-66B7-4A88-AC58-08FD799BC0F0}.Debug|ARM64.ActiveCfg = Debug|ARM64
@@ -24,6 +28,8 @@ Global
 		{9D064508-66B7-4A88-AC58-08FD799BC0F0}.Debug|x86.ActiveCfg = Debug|x86
 		{9D064508-66B7-4A88-AC58-08FD799BC0F0}.Debug|x86.Build.0 = Debug|x86
 		{9D064508-66B7-4A88-AC58-08FD799BC0F0}.Debug|x86.Deploy.0 = Debug|x86
+		{9D064508-66B7-4A88-AC58-08FD799BC0F0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9D064508-66B7-4A88-AC58-08FD799BC0F0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9D064508-66B7-4A88-AC58-08FD799BC0F0}.Release|ARM64.ActiveCfg = Release|ARM64
 		{9D064508-66B7-4A88-AC58-08FD799BC0F0}.Release|ARM64.Build.0 = Release|ARM64
 		{9D064508-66B7-4A88-AC58-08FD799BC0F0}.Release|ARM64.Deploy.0 = Release|ARM64
@@ -33,6 +39,24 @@ Global
 		{9D064508-66B7-4A88-AC58-08FD799BC0F0}.Release|x86.ActiveCfg = Release|x86
 		{9D064508-66B7-4A88-AC58-08FD799BC0F0}.Release|x86.Build.0 = Release|x86
 		{9D064508-66B7-4A88-AC58-08FD799BC0F0}.Release|x86.Deploy.0 = Release|x86
+		{9D064508-66B7-4A88-AC58-08FD799BC0F0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9D064508-66B7-4A88-AC58-08FD799BC0F0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{64C66D09-920A-4419-AC5D-F35A75812C2C}.Debug|ARM64.ActiveCfg = Debug|ARM64
+		{64C66D09-920A-4419-AC5D-F35A75812C2C}.Debug|ARM64.Build.0 = Debug|ARM64
+		{64C66D09-920A-4419-AC5D-F35A75812C2C}.Debug|x64.ActiveCfg = Debug|x64
+		{64C66D09-920A-4419-AC5D-F35A75812C2C}.Debug|x64.Build.0 = Debug|x64
+		{64C66D09-920A-4419-AC5D-F35A75812C2C}.Debug|x86.ActiveCfg = Debug|x64
+		{64C66D09-920A-4419-AC5D-F35A75812C2C}.Debug|x86.Build.0 = Debug|x64
+		{64C66D09-920A-4419-AC5D-F35A75812C2C}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{64C66D09-920A-4419-AC5D-F35A75812C2C}.Debug|Any CPU.Build.0 = Debug|x64
+		{64C66D09-920A-4419-AC5D-F35A75812C2C}.Release|ARM64.ActiveCfg = Release|ARM64
+		{64C66D09-920A-4419-AC5D-F35A75812C2C}.Release|ARM64.Build.0 = Release|ARM64
+		{64C66D09-920A-4419-AC5D-F35A75812C2C}.Release|x64.ActiveCfg = Release|x64
+		{64C66D09-920A-4419-AC5D-F35A75812C2C}.Release|x64.Build.0 = Release|x64
+		{64C66D09-920A-4419-AC5D-F35A75812C2C}.Release|x86.ActiveCfg = Release|x64
+		{64C66D09-920A-4419-AC5D-F35A75812C2C}.Release|x86.Build.0 = Release|x64
+		{64C66D09-920A-4419-AC5D-F35A75812C2C}.Release|Any CPU.ActiveCfg = Release|x64
+		{64C66D09-920A-4419-AC5D-F35A75812C2C}.Release|Any CPU.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
