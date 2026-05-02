@@ -43,6 +43,7 @@ public static class DomainRegistry
             ["weather"]       = new WeatherBehavior(),
             ["sensor"]        = new SensorBehavior(),
             ["binary_sensor"] = new BinarySensorBehavior(),
+            ["input_datetime"]= new InputDateTimeBehavior(),
         };
 
     /// <summary>
