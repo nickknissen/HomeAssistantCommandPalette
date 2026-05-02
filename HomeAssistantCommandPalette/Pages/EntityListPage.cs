@@ -257,37 +257,9 @@ internal sealed partial class EntityListPage : ListPage
         {
             AddClimateRows(entity, meta);
         }
-        else if (entity.Domain == "vacuum")
-        {
-            AddVacuumRows(entity, meta);
-        }
         else if (entity.Domain == "fan")
         {
             AddFanRows(entity, meta);
-        }
-        else if (entity.Domain == "person")
-        {
-            AddPersonRows(entity, meta);
-        }
-        else if (entity.Domain == "update")
-        {
-            AddUpdateRows(entity, meta);
-        }
-        else if (entity.Domain == "input_number")
-        {
-            AddInputNumberRows(entity, meta);
-        }
-        else if (entity.Domain == "timer")
-        {
-            AddTimerRows(entity, meta);
-        }
-        else if (entity.Domain == "input_select")
-        {
-            AddInputSelectRows(entity, meta);
-        }
-        else if (entity.Domain == "automation")
-        {
-            AddAutomationRows(entity, meta);
         }
         else if (entity.Domain == "weather")
         {
@@ -505,99 +477,10 @@ internal sealed partial class EntityListPage : ListPage
         }
     }
 
-    private static void AddInputNumberRows(HaEntity entity, List<IDetailsElement> meta)
-    {
-        if (TryGetDouble(entity.Attributes, "min", out var min)) meta.Add(Row("Min", FormatNum(min)));
-        if (TryGetDouble(entity.Attributes, "max", out var max)) meta.Add(Row("Max", FormatNum(max)));
-        if (TryGetDouble(entity.Attributes, "step", out var step)) meta.Add(Row("Step", FormatNum(step)));
-        if (entity.Attributes.TryGetValue("mode", out var mode) && mode is string ms && !string.IsNullOrEmpty(ms))
-        {
-            meta.Add(Row("Mode", ms));
-        }
-    }
-
-    private static void AddTimerRows(HaEntity entity, List<IDetailsElement> meta)
-    {
-        if (entity.Attributes.TryGetValue("duration", out var d) && d is string ds && !string.IsNullOrEmpty(ds))
-        {
-            meta.Add(Row("Duration", ds));
-        }
-        if (entity.Attributes.TryGetValue("remaining", out var r) && r is string rs && !string.IsNullOrEmpty(rs))
-        {
-            meta.Add(Row("Remaining", rs));
-        }
-        if (entity.Attributes.TryGetValue("finishes_at", out var f) && f is string fs && !string.IsNullOrEmpty(fs))
-        {
-            meta.Add(Row("Finishes at", fs));
-        }
-    }
-
-    private static void AddInputSelectRows(HaEntity entity, List<IDetailsElement> meta)
-    {
-        if (entity.Attributes.TryGetValue("options", out var opts) && opts is List<object?> options)
-        {
-            meta.Add(Row("Options", options.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)));
-        }
-    }
-
     private static string FormatNum(double v) =>
         v == System.Math.Floor(v)
             ? ((long)v).ToString(System.Globalization.CultureInfo.InvariantCulture)
             : v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
-
-    private static void AddUpdateRows(HaEntity entity, List<IDetailsElement> meta)
-    {
-        if (entity.Attributes.TryGetValue("title", out var t) && t is string ts && !string.IsNullOrEmpty(ts))
-        {
-            meta.Add(Row("Title", ts));
-        }
-        if (entity.Attributes.TryGetValue("installed_version", out var iv) && iv is string ivs && !string.IsNullOrEmpty(ivs))
-        {
-            meta.Add(Row("Installed", ivs));
-        }
-        if (entity.Attributes.TryGetValue("latest_version", out var lv) && lv is string lvs && !string.IsNullOrEmpty(lvs))
-        {
-            meta.Add(Row("Latest", lvs));
-        }
-        // in_progress can be a bool (false) or a numeric percent during install.
-        if (entity.Attributes.TryGetValue("in_progress", out var ip))
-        {
-            switch (ip)
-            {
-                case bool b when b: meta.Add(Row("In progress", "yes")); break;
-                case long l: meta.Add(Row("In progress", $"{l}%")); break;
-                case double d: meta.Add(Row("In progress", $"{(int)d}%")); break;
-            }
-        }
-        if (entity.Attributes.TryGetValue("auto_update", out var au) && au is bool aub)
-        {
-            meta.Add(Row("Auto update", aub ? "yes" : "no"));
-        }
-        if (entity.Attributes.TryGetValue("release_url", out var ru) && ru is string rus && !string.IsNullOrEmpty(rus))
-        {
-            meta.Add(Row("Release notes", rus));
-        }
-    }
-
-    private static void AddPersonRows(HaEntity entity, List<IDetailsElement> meta)
-    {
-        // Person `state` is the zone name ("home" / "not_home" / a custom
-        // zone). Lat/lon come from whichever device_tracker reports the
-        // freshest data; HA exposes that tracker via the `source` attribute.
-        if (TryGetDouble(entity.Attributes, "latitude", out var lat) &&
-            TryGetDouble(entity.Attributes, "longitude", out var lon))
-        {
-            meta.Add(Row("Location", $"{lat}, {lon}"));
-        }
-        if (TryGetDouble(entity.Attributes, "gps_accuracy", out var acc))
-        {
-            meta.Add(Row("GPS accuracy", $"{(int)acc} m"));
-        }
-        if (entity.Attributes.TryGetValue("source", out var src) && src is string srcs && !string.IsNullOrEmpty(srcs))
-        {
-            meta.Add(Row("Source", srcs));
-        }
-    }
 
     private static bool TryGetDouble(IReadOnlyDictionary<string, object?> attrs, string key, out double value)
     {
@@ -632,80 +515,6 @@ internal sealed partial class EntityListPage : ListPage
         {
             meta.Add(Row("Direction", dirs));
         }
-    }
-
-    private static void AddAutomationRows(HaEntity entity, List<IDetailsElement> meta)
-    {
-        if (entity.Attributes.TryGetValue("last_triggered", out var lt) && lt is string lts && !string.IsNullOrEmpty(lts))
-        {
-            // ISO timestamp from HA. Show as the original ISO — clearer than
-            // a fragile relative-time format, and tooling-friendly.
-            meta.Add(Row("Last triggered", lts));
-        }
-        if (entity.Attributes.TryGetValue("mode", out var mode) && mode is string ms && !string.IsNullOrEmpty(ms))
-        {
-            meta.Add(Row("Mode", ms));
-        }
-        if (entity.Attributes.TryGetValue("current", out var current))
-        {
-            // Number of currently-running instances (relevant for parallel
-            // / queued mode). 0 normally; >0 means the automation is mid-run.
-            var v = current switch { long l => l.ToString(System.Globalization.CultureInfo.InvariantCulture), double d => ((int)d).ToString(System.Globalization.CultureInfo.InvariantCulture), _ => null };
-            if (v is not null) meta.Add(Row("Running", v));
-        }
-        if (entity.Attributes.TryGetValue("id", out var id) && id is string ids && !string.IsNullOrEmpty(ids))
-        {
-            meta.Add(Row("Automation ID", ids));
-        }
-    }
-
-    private static void AddVacuumRows(HaEntity entity, List<IDetailsElement> meta)
-    {
-        if (entity.Attributes.TryGetValue("status", out var st) && st is string sts && !string.IsNullOrEmpty(sts))
-        {
-            meta.Add(Row("Status", sts));
-        }
-        if (entity.Attributes.TryGetValue("battery_level", out var bat))
-        {
-            var v = bat switch { long l => $"{l}%", double d => $"{(int)d}%", _ => null };
-            if (v is not null) meta.Add(Row("Battery", v));
-        }
-        if (entity.Attributes.TryGetValue("fan_speed", out var fs) && fs is string fss && !string.IsNullOrEmpty(fss))
-        {
-            meta.Add(Row("Fan speed", fss));
-        }
-        if (entity.Attributes.TryGetValue("cleaned_area", out var area))
-        {
-            var v = area switch { long l => $"{l} m²", double d => $"{d} m²", _ => null };
-            if (v is not null) meta.Add(Row("Cleaned", v));
-        }
-        // `cleaning_time` is integration-specific: most expose minutes as
-        // an int, a few expose a pre-formatted "HH:MM:SS" string. Pass
-        // strings through untouched and format ints as Hh Mm assuming
-        // minutes (matches the frontend's default rendering).
-        if (entity.Attributes.TryGetValue("cleaning_time", out var ct))
-        {
-            var v = ct switch
-            {
-                string s when !string.IsNullOrEmpty(s) => s,
-                long l => FormatMinutes(l),
-                double d => FormatMinutes((long)d),
-                _ => null,
-            };
-            if (v is not null) meta.Add(Row("Cleaning time", v));
-        }
-        if (entity.Attributes.TryGetValue("error", out var err) && err is string errs && !string.IsNullOrEmpty(errs))
-        {
-            meta.Add(Row("Last error", errs));
-        }
-    }
-
-    private static string FormatMinutes(long minutes)
-    {
-        if (minutes < 60) return $"{minutes}m";
-        var h = minutes / 60;
-        var m = minutes % 60;
-        return m == 0 ? $"{h}h" : $"{h}h {m}m";
     }
 
     private static double? TryGetSeconds(IReadOnlyDictionary<string, object?> attrs, string key) =>
@@ -929,50 +738,10 @@ internal sealed partial class EntityListPage : ListPage
             };
         }
 
-        if (entity.Domain == "vacuum")
-        {
-            if (unavailable) return Icons.VacuumUnavailable;
-            return string.Equals(entity.State, "cleaning", System.StringComparison.OrdinalIgnoreCase)
-                ? Icons.VacuumCleaning
-                : Icons.VacuumIdle;
-        }
-
-        if (entity.Domain == "automation")
-        {
-            if (unavailable) return Icons.AutomationUnavailable;
-            return entity.IsOn ? Icons.AutomationOn : Icons.AutomationOff;
-        }
-
         if (entity.Domain == "fan")
         {
             if (unavailable) return Icons.FanUnavailable;
             return entity.IsOn ? Icons.FanOn : Icons.FanOff;
-        }
-
-        if (entity.Domain == "timer")
-        {
-            if (unavailable) return Icons.TimerUnavailable;
-            // Yellow when active; blue for idle / paused. Mirrors Raycast.
-            return string.Equals(entity.State, "active", System.StringComparison.OrdinalIgnoreCase)
-                ? Icons.TimerOn
-                : Icons.TimerOff;
-        }
-
-        if (entity.Domain == "update")
-        {
-            if (unavailable) return Icons.UpdateUnavailable;
-            // state="on" means an update is available — yellow draws the eye.
-            return entity.IsOn ? Icons.UpdateOn : Icons.UpdateOff;
-        }
-
-        if (entity.Domain == "person")
-        {
-            if (unavailable) return Icons.PersonUnavailable;
-            // state is the zone the person is in. "home" → yellow; any
-            // other zone (including "not_home") → blue.
-            return string.Equals(entity.State, "home", System.StringComparison.OrdinalIgnoreCase)
-                ? Icons.PersonOn
-                : Icons.PersonOff;
         }
 
         if (entity.EntityId == "sun.sun")
@@ -987,8 +756,6 @@ internal sealed partial class EntityListPage : ListPage
         if (entity.Domain == "camera") return unavailable ? Icons.CameraUnavailable : Icons.Camera;
         if (entity.Domain == "weather") return Icons.WeatherForCondition(entity.State, unavailable);
 
-        if (entity.Domain == "input_select") return Icons.InputSelect;
-        if (entity.Domain == "input_number") return Icons.InputNumber;
         if (entity.Domain == "input_text") return Icons.InputText;
         if (entity.Domain == "input_datetime")
         {
@@ -1093,16 +860,8 @@ internal sealed partial class EntityListPage : ListPage
         // for read-only or unsupported domains.
         return entity.Domain switch
         {
-            "light" or "fan" or "automation" or "cover" or "media_player"
+            "light" or "fan" or "cover" or "media_player"
                 => new CallServiceCommand(_client, entity.Domain, "toggle", entity.EntityId, $"Toggle {entity.FriendlyName}", icon: Icons.Toggle, onSuccess: OnServiceCallSucceeded),
-            "vacuum"
-                => string.Equals(entity.State, "cleaning", System.StringComparison.OrdinalIgnoreCase)
-                    ? new CallServiceCommand(_client, "vacuum", "pause", entity.EntityId, $"Pause {entity.FriendlyName}", icon: Icons.Pause, onSuccess: OnServiceCallSucceeded)
-                    : new CallServiceCommand(_client, "vacuum", "start", entity.EntityId, $"Start {entity.FriendlyName}", icon: Icons.Play, onSuccess: OnServiceCallSucceeded),
-            "timer"
-                => string.Equals(entity.State, "active", System.StringComparison.OrdinalIgnoreCase)
-                    ? new CallServiceCommand(_client, "timer", "pause", entity.EntityId, $"Pause {entity.FriendlyName}", icon: Icons.Pause, onSuccess: OnServiceCallSucceeded)
-                    : new CallServiceCommand(_client, "timer", "start", entity.EntityId, $"Start {entity.FriendlyName}", icon: Icons.Play, onSuccess: OnServiceCallSucceeded),
             _ => new OpenDashboardCommand(_settings, entity.EntityId),
         };
     }
@@ -1260,20 +1019,12 @@ internal sealed partial class EntityListPage : ListPage
     {
         var items = new List<IContextItem>(8);
 
-        if (entity.Domain is "light" or "fan" or "automation" or "media_player")
+        if (entity.Domain is "light" or "fan" or "media_player")
         {
             items.Add(new CommandContextItem(
                 new CallServiceCommand(_client, entity.Domain, "turn_on", entity.EntityId, $"Turn on {entity.FriendlyName}", icon: Icons.TurnOn, onSuccess: OnServiceCallSucceeded)));
             items.Add(new CommandContextItem(
                 new CallServiceCommand(_client, entity.Domain, "turn_off", entity.EntityId, $"Turn off {entity.FriendlyName}", icon: Icons.TurnOff, onSuccess: OnServiceCallSucceeded)));
-        }
-
-        // Manual trigger — fire the automation regardless of trigger
-        // conditions. Distinct from turn_on, which only enables it.
-        if (entity.Domain == "automation")
-        {
-            items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, "automation", "trigger", entity.EntityId, $"Trigger {entity.FriendlyName}", icon: Icons.Trigger, onSuccess: OnServiceCallSucceeded)));
         }
 
         // Light brightness presets — nested under a single "Set brightness"
@@ -1604,69 +1355,6 @@ internal sealed partial class EntityListPage : ListPage
             }
         }
 
-        if (entity.Domain == "vacuum")
-        {
-            // supported_features bits — only surface actions the device
-            // declares it can do. Bit values from HA's vacuum component:
-            //   1 TURN_ON, 2 TURN_OFF, 4 PAUSE, 8 STOP, 16 RETURN_HOME,
-            //   32 FAN_SPEED, 64 BATTERY, 128 STATUS, 256 SEND_COMMAND,
-            //   512 LOCATE, 1024 CLEAN_SPOT, 4096 STATE, 8192 START.
-            var sf = entity.Attributes.TryGetValue("supported_features", out var sfo) && sfo is long b ? b : -1;
-            bool Has(long bit) => sf < 0 || (sf & bit) == bit;
-
-            if (Has(8192))
-            {
-                items.Add(new CommandContextItem(
-                    new CallServiceCommand(_client, "vacuum", "start", entity.EntityId, $"Start {entity.FriendlyName}", icon: Icons.Play, onSuccess: OnServiceCallSucceeded)));
-            }
-            if (Has(4))
-            {
-                items.Add(new CommandContextItem(
-                    new CallServiceCommand(_client, "vacuum", "pause", entity.EntityId, $"Pause {entity.FriendlyName}", icon: Icons.Pause, onSuccess: OnServiceCallSucceeded)));
-            }
-            if (Has(8))
-            {
-                items.Add(new CommandContextItem(
-                    new CallServiceCommand(_client, "vacuum", "stop", entity.EntityId, $"Stop {entity.FriendlyName}", icon: Icons.Stop, onSuccess: OnServiceCallSucceeded)));
-            }
-            if (Has(16))
-            {
-                items.Add(new CommandContextItem(
-                    new CallServiceCommand(_client, "vacuum", "return_to_base", entity.EntityId, $"Send {entity.FriendlyName} home", icon: Icons.Home, onSuccess: OnServiceCallSucceeded)));
-            }
-            if (Has(512))
-            {
-                items.Add(new CommandContextItem(
-                    new CallServiceCommand(_client, "vacuum", "locate", entity.EntityId, $"Locate {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
-            }
-            if (Has(1024))
-            {
-                items.Add(new CommandContextItem(
-                    new CallServiceCommand(_client, "vacuum", "clean_spot", entity.EntityId, $"Clean spot with {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
-            }
-            // Fan speed submenu when the vacuum reports fan_speed_list and
-            // supports FAN_SPEED.
-            if (Has(32) && entity.Attributes.TryGetValue("fan_speed_list", out var fsl) && fsl is List<object?> speeds)
-            {
-                var speedItems = speeds
-                    .OfType<string>()
-                    .Select(s => (IContextItem)new CommandContextItem(new CallServiceCommand(
-                        _client, "vacuum", "set_fan_speed", entity.EntityId,
-                        s, extraData: new Dictionary<string, object?> { ["fan_speed"] = s },
-                        onSuccess: OnServiceCallSucceeded)))
-                    .ToArray();
-                if (speedItems.Length > 0)
-                {
-                    items.Add(new CommandContextItem(new NoOpCommand())
-                    {
-                        Title = "Set fan speed…",
-                        Icon = Icons.Fan,
-                        MoreCommands = speedItems,
-                    });
-                }
-            }
-        }
-
         if (entity.Domain == "cover")
         {
             items.Add(new CommandContextItem(
@@ -1718,144 +1406,6 @@ internal sealed partial class EntityListPage : ListPage
                     Icon = Icons.Stop,
                     MoreCommands = presets,
                 });
-            }
-        }
-
-        if (entity.Domain == "update")
-        {
-            // supported_features bits (HA UpdateEntityFeature):
-            //   1 INSTALL, 2 SPECIFIC_VERSION, 4 PROGRESS, 8 BACKUP, 16 RELEASE_NOTES.
-            var sf = entity.Attributes.TryGetValue("supported_features", out var sfo) && sfo is long b ? b : -1;
-            bool Has(long bit) => sf < 0 || (sf & bit) == bit;
-
-            // Updates are a binary state: state="on" means an update is
-            // available. in_progress is either a bool or a numeric percent
-            // while installing; either non-false form means an install is
-            // already running and Install should be hidden.
-            var available = entity.IsOn;
-            var inProgress = entity.Attributes.TryGetValue("in_progress", out var ipo)
-                && ipo is not (null or false);
-
-            if (available && !inProgress && Has(1))
-            {
-                // Always request a backup when the integration supports it —
-                // matches Raycast's default and is the safer choice. Without
-                // BACKUP support the param is dropped (HA would 400 on it).
-                IReadOnlyDictionary<string, object?>? extra = Has(8)
-                    ? new Dictionary<string, object?> { ["backup"] = true }
-                    : null;
-                items.Add(new CommandContextItem(
-                    new CallServiceCommand(_client, "update", "install", entity.EntityId,
-                        $"Install {entity.FriendlyName}", icon: Icons.Play,
-                        extraData: extra,
-                        onSuccess: OnServiceCallSucceeded)));
-            }
-
-            if (available)
-            {
-                items.Add(new CommandContextItem(
-                    new CallServiceCommand(_client, "update", "skip", entity.EntityId,
-                        $"Skip {entity.FriendlyName}", icon: Icons.Next,
-                        onSuccess: OnServiceCallSucceeded)));
-            }
-
-            if (entity.Attributes.TryGetValue("release_url", out var ru) && ru is string rus && !string.IsNullOrEmpty(rus))
-            {
-                items.Add(new CommandContextItem(new OpenUrlCommand(rus) { Name = "Open release notes" }));
-            }
-        }
-
-        if (entity.Domain == "input_select")
-        {
-            // "Select option…" submenu — every option except the current
-            // state. Hidden if the entity has no options or is unavailable.
-            if (!string.Equals(entity.State, "unavailable", System.StringComparison.OrdinalIgnoreCase)
-                && entity.Attributes.TryGetValue("options", out var opts) && opts is List<object?> options)
-            {
-                var subItems = options
-                    .OfType<string>()
-                    .Where(o => !string.Equals(o, entity.State, System.StringComparison.Ordinal))
-                    .Select(o => (IContextItem)new CommandContextItem(new CallServiceCommand(
-                        _client, "input_select", "select_option", entity.EntityId,
-                        o, extraData: new Dictionary<string, object?> { ["option"] = o },
-                        onSuccess: OnServiceCallSucceeded)))
-                    .ToArray();
-                if (subItems.Length > 0)
-                {
-                    items.Add(new CommandContextItem(new NoOpCommand())
-                    {
-                        Title = "Select option…",
-                        MoreCommands = subItems,
-                    });
-                }
-            }
-        }
-
-        if (entity.Domain == "input_number")
-        {
-            // input_number.increment / decrement use the entity's own step;
-            // we only need to gate the action when the result would clamp.
-            var hasValue = double.TryParse(entity.State,
-                System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out var v);
-            var hasMin = TryGetDouble(entity.Attributes, "min", out var min);
-            var hasMax = TryGetDouble(entity.Attributes, "max", out var max);
-            var hasStep = TryGetDouble(entity.Attributes, "step", out var step);
-
-            if (hasValue && hasStep && (!hasMax || v + step <= max))
-            {
-                items.Add(new CommandContextItem(
-                    new CallServiceCommand(_client, "input_number", "increment", entity.EntityId,
-                        $"Increase {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
-            }
-            if (hasValue && hasStep && (!hasMin || v - step >= min))
-            {
-                items.Add(new CommandContextItem(
-                    new CallServiceCommand(_client, "input_number", "decrement", entity.EntityId,
-                        $"Decrease {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
-            }
-        }
-
-        if (entity.Domain == "timer")
-        {
-            // Mirror Raycast: only act on `editable` timers (HA exposes
-            // start/pause/cancel for code-defined timers too, but they
-            // round-trip via the YAML config — Raycast hides those.)
-            var editable = entity.Attributes.TryGetValue("editable", out var ed) && ed is bool eb && eb;
-            if (editable)
-            {
-                var isActive = string.Equals(entity.State, "active", System.StringComparison.OrdinalIgnoreCase);
-                items.Add(new CommandContextItem(
-                    new CallServiceCommand(_client, "timer", "start", entity.EntityId,
-                        isActive ? $"Restart {entity.FriendlyName}" : $"Start {entity.FriendlyName}",
-                        icon: Icons.Play, onSuccess: OnServiceCallSucceeded)));
-                items.Add(new CommandContextItem(
-                    new CallServiceCommand(_client, "timer", "pause", entity.EntityId,
-                        $"Pause {entity.FriendlyName}", icon: Icons.Pause, onSuccess: OnServiceCallSucceeded)));
-                items.Add(new CommandContextItem(
-                    new CallServiceCommand(_client, "timer", "cancel", entity.EntityId,
-                        $"Cancel {entity.FriendlyName}", icon: Icons.Stop, onSuccess: OnServiceCallSucceeded)));
-                items.Add(new CommandContextItem(
-                    new CallServiceCommand(_client, "timer", "finish", entity.EntityId,
-                        $"Finish {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
-            }
-        }
-
-        if (entity.Domain == "person")
-        {
-            // Open in Google Maps — universal across platforms (Apple Maps
-            // is macOS-only, so we don't ship it on Windows).
-            if (TryGetDouble(entity.Attributes, "latitude", out var lat) &&
-                TryGetDouble(entity.Attributes, "longitude", out var lon))
-            {
-                var url = $"https://www.google.com/maps/search/?api=1&query={lat.ToString(System.Globalization.CultureInfo.InvariantCulture)},{lon.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
-                items.Add(new CommandContextItem(new OpenUrlCommand(url) { Name = "Open in Google Maps" }));
-            }
-            // user_id is the HA user UUID this person is linked to — handy
-            // when wiring up automations or template conditions.
-            if (entity.Attributes.TryGetValue("user_id", out var uid) && uid is string uids && !string.IsNullOrEmpty(uids))
-            {
-                items.Add(new CommandContextItem(new CopyTextCommand(uids) { Name = "Copy user ID" }));
             }
         }
 
