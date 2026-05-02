@@ -20,15 +20,6 @@ public sealed class VacuumBehavior : DomainBehavior
 
     public override string Domain => "vacuum";
 
-    public override IconInfo BuildIcon(in DomainCtx ctx)
-    {
-        if (string.Equals(ctx.Entity.State, "unavailable", StringComparison.OrdinalIgnoreCase))
-            return Icons.VacuumUnavailable;
-        return string.Equals(ctx.Entity.State, "cleaning", StringComparison.OrdinalIgnoreCase)
-            ? Icons.VacuumCleaning
-            : Icons.VacuumIdle;
-    }
-
     public override ICommand BuildPrimary(in DomainCtx ctx)
     {
         var name = ctx.Entity.FriendlyName;

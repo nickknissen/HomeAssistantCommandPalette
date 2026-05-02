@@ -11,13 +11,6 @@ public sealed class AutomationBehavior : DomainBehavior
 {
     public override string Domain => "automation";
 
-    public override IconInfo BuildIcon(in DomainCtx ctx)
-    {
-        if (string.Equals(ctx.Entity.State, "unavailable", StringComparison.OrdinalIgnoreCase))
-            return Icons.AutomationUnavailable;
-        return ctx.Entity.IsOn ? Icons.AutomationOn : Icons.AutomationOff;
-    }
-
     public override ICommand BuildPrimary(in DomainCtx ctx)
         => new CallServiceCommand(
             ctx.Client, "automation", "toggle", ctx.Entity.EntityId,

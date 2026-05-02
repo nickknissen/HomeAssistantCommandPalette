@@ -16,12 +16,6 @@ public sealed class WeatherBehavior : DomainBehavior
 
     public override string Domain => "weather";
 
-    public override IconInfo BuildIcon(in DomainCtx ctx)
-    {
-        var unavailable = string.Equals(ctx.Entity.State, "unavailable", System.StringComparison.OrdinalIgnoreCase);
-        return Icons.WeatherForCondition(ctx.Entity.State, unavailable);
-    }
-
     public override void AddDetailRows(in DomainCtx ctx, List<IDetailsElement> rows)
     {
         var entity = ctx.Entity;

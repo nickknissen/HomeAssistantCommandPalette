@@ -143,12 +143,10 @@ internal static class Icons
     public static IconInfo WeatherUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\weather-unavailable.svg");
 
     /// <summary>
-    /// Generic state-tinted icon dispatch. Used by the
-    /// <see cref="HomeAssistantCommandPalette.Pages.Domains.DomainBehavior"/>
-    /// default — concrete behaviors override <c>BuildIcon</c> when they
-    /// need richer rules (sub-state palettes, device_class dispatch,
-    /// supported_features gating, …). Domains land here as their PRs
-    /// migrate them off the legacy <c>IconForEntity</c> dispatcher.
+    /// Generic state-tinted icon dispatch. Used as the fallback inside
+    /// <see cref="HomeAssistantCommandPalette.Pages.Domains.IconPipeline.RegistryIconRules"/>
+    /// for unregistered domains. Rich domains register an
+    /// <c>IDomainIconRule</c> with the registry instead of routing here.
     /// </summary>
     public static IconInfo ForDomain(string domain, string state)
     {
@@ -166,9 +164,10 @@ internal static class Icons
             // Always-blue helper domains.
             "zone"          => unavailable ? ZoneUnavailable          : Zone,
             "input_text"    => InputText,
-            // Behaviors with sub-state palettes (vacuum/timer/automation/
-            // update/person/light/cover/fan/climate/media_player) override
-            // BuildIcon directly; their entries don't route through here.
+            // Rich domains (vacuum/timer/automation/update/person/light/
+            // cover/fan/climate/media_player/sensor/binary_sensor/weather/
+            // sun/input_datetime) register an IDomainIconRule with the
+            // resolver registry; their entries don't route through here.
             _               => unavailable ? ShapeUnavailable         : Shape,
         };
     }

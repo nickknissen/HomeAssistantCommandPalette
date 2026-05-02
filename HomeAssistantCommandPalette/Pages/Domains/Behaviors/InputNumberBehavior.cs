@@ -10,8 +10,6 @@ public sealed class InputNumberBehavior : DomainBehavior
 {
     public override string Domain => "input_number";
 
-    public override IconInfo BuildIcon(in DomainCtx ctx) => Icons.InputNumber;
-
     public override void AddContextItems(in DomainCtx ctx, List<IContextItem> items)
     {
         var entity = ctx.Entity;

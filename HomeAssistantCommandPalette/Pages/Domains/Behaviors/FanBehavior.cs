@@ -16,13 +16,6 @@ public sealed class FanBehavior : DomainBehavior
 
     public override string Domain => "fan";
 
-    public override IconInfo BuildIcon(in DomainCtx ctx)
-    {
-        if (string.Equals(ctx.Entity.State, "unavailable", StringComparison.OrdinalIgnoreCase))
-            return Icons.FanUnavailable;
-        return ctx.Entity.IsOn ? Icons.FanOn : Icons.FanOff;
-    }
-
     public override ICommand BuildPrimary(in DomainCtx ctx)
         => new CallServiceCommand(
             ctx.Client, "fan", "toggle", ctx.Entity.EntityId,

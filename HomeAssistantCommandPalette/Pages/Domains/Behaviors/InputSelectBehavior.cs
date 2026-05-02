@@ -12,8 +12,6 @@ public sealed class InputSelectBehavior : DomainBehavior
 {
     public override string Domain => "input_select";
 
-    public override IconInfo BuildIcon(in DomainCtx ctx) => Icons.InputSelect;
-
     public override void AddContextItems(in DomainCtx ctx, List<IContextItem> items)
     {
         var entity = ctx.Entity;

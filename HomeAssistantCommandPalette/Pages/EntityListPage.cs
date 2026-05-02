@@ -4,6 +4,7 @@ using System.Linq;
 using HomeAssistantCommandPalette.Commands;
 using HomeAssistantCommandPalette.Models;
 using HomeAssistantCommandPalette.Pages.Domains;
+using HomeAssistantCommandPalette.Pages.Domains.IconPipeline;
 using HomeAssistantCommandPalette.Services;
 using Microsoft.CommandPalette.Extensions;
 using Microsoft.CommandPalette.Extensions.Toolkit;
@@ -27,6 +28,7 @@ internal sealed partial class EntityListPage : ListPage
 {
     private readonly HaSettings _settings;
     private readonly IHaClient _client;
+    private readonly IEntityIconResolver _iconResolver;
     private readonly HashSet<string>? _domains;
     private readonly HashSet<string>? _deviceClasses;
     private readonly bool _sortByNumericStateAscending;
@@ -34,6 +36,7 @@ internal sealed partial class EntityListPage : ListPage
     public EntityListPage(
         HaSettings settings,
         IHaClient client,
+        IEntityIconResolver iconResolver,
         string title,
         string id,
         IReadOnlyCollection<string>? domains = null,
@@ -43,6 +46,7 @@ internal sealed partial class EntityListPage : ListPage
     {
         _settings = settings;
         _client = client;
+        _iconResolver = iconResolver;
         _domains = domains is null ? null : new HashSet<string>(domains, StringComparer.Ordinal);
         _deviceClasses = deviceClasses is null ? null : new HashSet<string>(deviceClasses, StringComparer.Ordinal);
         _sortByNumericStateAscending = sortByNumericStateAscending;
@@ -163,32 +167,10 @@ internal sealed partial class EntityListPage : ListPage
             Title = entity.FriendlyName,
             Subtitle = BuildSubtitle(entity),
             Tags = BuildTags(entity),
-            Icon = ResolveEntityIcon(entity, behavior.BuildIcon(in ctx)),
+            Icon = _iconResolver.Resolve(entity),
             MoreCommands = ctxItems.ToArray(),
             Details = details,
         };
-    }
-
-    /// <summary>
-    /// Wraps a behavior-supplied icon with the page-level person-avatar
-    /// override. Persons get their <c>entity_picture</c> avatar (Gravatar
-    /// or HA-served) when one is set; if the fetch fails we drop back to
-    /// the supplied icon. The override lives on the page (not in
-    /// <see cref="Behaviors.PersonBehavior"/>) because it requires
-    /// authenticated HTTP through <see cref="IHaClient"/>.
-    /// </summary>
-    private IconInfo ResolveEntityIcon(HaEntity entity, IconInfo fallback)
-    {
-        if (entity.Domain == "person"
-            && entity.Attributes.TryGetValue("entity_picture", out var pic)
-            && pic is string picUrl
-            && !string.IsNullOrEmpty(picUrl))
-        {
-            var path = _client.GetEntityPicturePath(entity.EntityId, picUrl);
-            if (path is not null) return new IconInfo(path);
-        }
-
-        return fallback;
     }
 
     private string BuildSubtitle(HaEntity entity)

@@ -1,35 +1,32 @@
 using HomeAssistantCommandPalette;
+using HomeAssistantCommandPalette.Models;
 using HomeAssistantCommandPalette.Pages.Domains;
 using HomeAssistantCommandPalette.Pages.Domains.Behaviors;
-using HomeAssistantCommandPalette.Services;
+using HomeAssistantCommandPalette.Pages.Domains.IconPipeline.Rules;
 using HomeAssistantCommandPalette.Tests.Fakes;
 
 namespace HomeAssistantCommandPalette.Tests;
 
 public class SunBehaviorTests
 {
-    private static DomainCtx MakeCtx(string state)
-    {
-        var entity = TestEntities.Make("sun.sun", state);
-        return new DomainCtx(entity, new RecordingHaClient(), new HaSettings(), OnSuccess: () => { });
-    }
+    private static HaEntity MakeEntity(string state) => TestEntities.Make("sun.sun", state);
 
     [Fact]
     public void Above_horizon_uses_sun_day_icon()
     {
-        IconAssert.Same(Icons.SunDay, new SunBehavior().BuildIcon(MakeCtx("above_horizon")));
+        IconAssert.Same(Icons.SunDay, new SunIconRule().Pick(MakeEntity("above_horizon")));
     }
 
     [Fact]
     public void Below_horizon_uses_sun_night_icon()
     {
-        IconAssert.Same(Icons.SunNight, new SunBehavior().BuildIcon(MakeCtx("below_horizon")));
+        IconAssert.Same(Icons.SunNight, new SunIconRule().Pick(MakeEntity("below_horizon")));
     }
 
     [Fact]
     public void Unavailable_uses_sun_unavailable_icon()
     {
-        IconAssert.Same(Icons.SunUnavailable, new SunBehavior().BuildIcon(MakeCtx("unavailable")));
+        IconAssert.Same(Icons.SunUnavailable, new SunIconRule().Pick(MakeEntity("unavailable")));
     }
 
     [Fact]

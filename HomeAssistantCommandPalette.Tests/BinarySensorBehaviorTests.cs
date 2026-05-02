@@ -1,7 +1,9 @@
 using System.Collections.Generic;
 using HomeAssistantCommandPalette;
+using HomeAssistantCommandPalette.Models;
 using HomeAssistantCommandPalette.Pages.Domains;
 using HomeAssistantCommandPalette.Pages.Domains.Behaviors;
+using HomeAssistantCommandPalette.Pages.Domains.IconPipeline.Rules;
 using HomeAssistantCommandPalette.Services;
 using HomeAssistantCommandPalette.Tests.Fakes;
 using Microsoft.CommandPalette.Extensions.Toolkit;
@@ -10,11 +12,11 @@ namespace HomeAssistantCommandPalette.Tests;
 
 public class BinarySensorBehaviorTests
 {
+    private static HaEntity MakeEntity(string state, IReadOnlyDictionary<string, object?>? attrs = null)
+        => TestEntities.Make("binary_sensor.x", state, attributes: attrs);
+
     private static DomainCtx MakeCtx(string state, IReadOnlyDictionary<string, object?>? attrs = null)
-    {
-        var entity = TestEntities.Make("binary_sensor.x", state, attributes: attrs);
-        return new DomainCtx(entity, new RecordingHaClient(), new HaSettings(), OnSuccess: () => { });
-    }
+        => new(MakeEntity(state, attrs), new RecordingHaClient(), new HaSettings(), OnSuccess: () => { });
 
     public static IEnumerable<object[]> StateBearingDispatch() => new[]
     {
@@ -44,11 +46,11 @@ public class BinarySensorBehaviorTests
     [MemberData(nameof(StateBearingDispatch))]
     public void State_bearing_device_class_dispatches_correctly(string deviceClass, string state, string expectedIconName)
     {
-        var ctx = MakeCtx(state, new Dictionary<string, object?>
+        var entity = MakeEntity(state, new Dictionary<string, object?>
         {
             ["device_class"] = deviceClass,
         });
-        var actual = new BinarySensorBehavior().BuildIcon(in ctx);
+        var actual = new BinarySensorIconRule().Pick(entity);
         IconAssert.Same(IconByName(expectedIconName), actual);
     }
 
@@ -64,28 +66,28 @@ public class BinarySensorBehaviorTests
     [InlineData("update",       nameof(Icons.UpdateUnavailable))]
     public void Unavailable_state_uses_unavailable_variant(string deviceClass, string expectedIconName)
     {
-        var ctx = MakeCtx("unavailable", new Dictionary<string, object?>
+        var entity = MakeEntity("unavailable", new Dictionary<string, object?>
         {
             ["device_class"] = deviceClass,
         });
-        IconAssert.Same(IconByName(expectedIconName), new BinarySensorBehavior().BuildIcon(in ctx));
+        IconAssert.Same(IconByName(expectedIconName), new BinarySensorIconRule().Pick(entity));
     }
 
     [Fact]
     public void Unknown_device_class_falls_back_to_shape()
     {
-        var ctx = MakeCtx("on", new Dictionary<string, object?>
+        var entity = MakeEntity("on", new Dictionary<string, object?>
         {
             ["device_class"] = "wibble",
         });
-        IconAssert.Same(Icons.Shape, new BinarySensorBehavior().BuildIcon(in ctx));
+        IconAssert.Same(Icons.Shape, new BinarySensorIconRule().Pick(entity));
     }
 
     [Fact]
     public void Missing_device_class_falls_back_to_shape()
     {
-        var ctx = MakeCtx("on", attrs: null);
-        IconAssert.Same(Icons.Shape, new BinarySensorBehavior().BuildIcon(in ctx));
+        var entity = MakeEntity("on", attrs: null);
+        IconAssert.Same(Icons.Shape, new BinarySensorIconRule().Pick(entity));
     }
 
     [Fact]

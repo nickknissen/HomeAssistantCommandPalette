@@ -17,20 +17,6 @@ public sealed class CoverBehavior : DomainBehavior
 
     public override string Domain => "cover";
 
-    public override IconInfo BuildIcon(in DomainCtx ctx)
-    {
-        if (string.Equals(ctx.Entity.State, "unavailable", StringComparison.OrdinalIgnoreCase))
-            return Icons.CoverUnavailable;
-        return ctx.Entity.State.ToLowerInvariant() switch
-        {
-            "opening" => Icons.CoverOpening,
-            "closing" => Icons.CoverClosing,
-            "closed" => Icons.CoverClosed,
-            // open + unknown → open
-            _ => Icons.CoverOpen,
-        };
-    }
-
     public override ICommand BuildPrimary(in DomainCtx ctx)
         => new CallServiceCommand(
             ctx.Client, "cover", "toggle", ctx.Entity.EntityId,
