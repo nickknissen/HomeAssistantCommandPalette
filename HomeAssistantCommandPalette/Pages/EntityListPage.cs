@@ -245,10 +245,6 @@ internal sealed partial class EntityListPage : ListPage
         {
             AddLightRows(entity, meta);
         }
-        else if (entity.Domain == "cover")
-        {
-            AddCoverRows(entity, meta);
-        }
         else if (entity.Domain == "media_player")
         {
             AddMediaPlayerRows(entity, meta);
@@ -256,10 +252,6 @@ internal sealed partial class EntityListPage : ListPage
         else if (entity.Domain == "climate")
         {
             AddClimateRows(entity, meta);
-        }
-        else if (entity.Domain == "fan")
-        {
-            AddFanRows(entity, meta);
         }
         else if (entity.Domain == "weather")
         {
@@ -496,26 +488,6 @@ internal sealed partial class EntityListPage : ListPage
         return false;
     }
 
-    private static void AddFanRows(HaEntity entity, List<IDetailsElement> meta)
-    {
-        if (entity.Attributes.TryGetValue("percentage", out var pct))
-        {
-            var v = pct switch { long l => $"{l}%", double d => $"{(int)d}%", _ => null };
-            if (v is not null) meta.Add(Row("Speed", v));
-        }
-        if (entity.Attributes.TryGetValue("preset_mode", out var pm) && pm is string pms && !string.IsNullOrEmpty(pms))
-        {
-            meta.Add(Row("Preset", pms));
-        }
-        if (entity.Attributes.TryGetValue("oscillating", out var osc) && osc is bool b)
-        {
-            meta.Add(Row("Oscillating", b ? "yes" : "no"));
-        }
-        if (entity.Attributes.TryGetValue("direction", out var dir) && dir is string dirs && !string.IsNullOrEmpty(dirs))
-        {
-            meta.Add(Row("Direction", dirs));
-        }
-    }
 
     private static double? TryGetSeconds(IReadOnlyDictionary<string, object?> attrs, string key) =>
         attrs.TryGetValue(key, out var v)
@@ -661,28 +633,6 @@ internal sealed partial class EntityListPage : ListPage
         }
     }
 
-    private static void AddCoverRows(HaEntity entity, List<IDetailsElement> meta)
-    {
-        if (entity.Attributes.TryGetValue("current_position", out var pos) && pos is long p)
-        {
-            meta.Add(Row("Position", $"{p}%"));
-        }
-        if (entity.Attributes.TryGetValue("current_tilt_position", out var tilt) && tilt is long t)
-        {
-            meta.Add(Row("Tilt", $"{t}%"));
-        }
-        // `working` is true while the cover is actively moving — distinct
-        // from `state == opening|closing` because some integrations report
-        // it independently of the discrete state machine.
-        if (entity.Attributes.TryGetValue("working", out var working) && working is bool wb)
-        {
-            meta.Add(Row("Working", wb ? "yes" : "no"));
-        }
-        if (entity.Attributes.TryGetValue("device_class", out var dc) && dc is string dcs && !string.IsNullOrEmpty(dcs))
-        {
-            meta.Add(Row("Device class", dcs));
-        }
-    }
 
     private static DetailsElement Row(string key, string value) => new()
     {
@@ -707,18 +657,6 @@ internal sealed partial class EntityListPage : ListPage
             return isGroup ? Icons.LightGroupOff : Icons.LightOff;
         }
 
-        if (entity.Domain == "cover")
-        {
-            if (unavailable) return Icons.CoverUnavailable;
-            return entity.State.ToLowerInvariant() switch
-            {
-                "opening" => Icons.CoverOpening,
-                "closing" => Icons.CoverClosing,
-                "closed" => Icons.CoverClosed,
-                _ => Icons.CoverOpen, // open + unknown → open
-            };
-        }
-
         if (entity.Domain == "media_player")
         {
             if (unavailable) return Icons.MediaPlayerUnavailable;
@@ -736,12 +674,6 @@ internal sealed partial class EntityListPage : ListPage
                 "auto" or "heat_cool" => Icons.ClimateAuto,
                 _ => Icons.ClimateActive, // heat / cool / dry / fan_only
             };
-        }
-
-        if (entity.Domain == "fan")
-        {
-            if (unavailable) return Icons.FanUnavailable;
-            return entity.IsOn ? Icons.FanOn : Icons.FanOff;
         }
 
         if (entity.EntityId == "sun.sun")
@@ -860,7 +792,7 @@ internal sealed partial class EntityListPage : ListPage
         // for read-only or unsupported domains.
         return entity.Domain switch
         {
-            "light" or "fan" or "cover" or "media_player"
+            "light" or "media_player"
                 => new CallServiceCommand(_client, entity.Domain, "toggle", entity.EntityId, $"Toggle {entity.FriendlyName}", icon: Icons.Toggle, onSuccess: OnServiceCallSucceeded),
             _ => new OpenDashboardCommand(_settings, entity.EntityId),
         };
@@ -905,28 +837,6 @@ internal sealed partial class EntityListPage : ListPage
             extraData: new Dictionary<string, object?> { ["rgb_color"] = rgb },
             onSuccess: OnServiceCallSucceeded));
 
-    private CommandContextItem CoverPositionPreset(HaEntity entity, int position) =>
-        new(new CallServiceCommand(
-            _client,
-            domain: "cover",
-            service: "set_cover_position",
-            entityId: entity.EntityId,
-            displayName: $"{position}%",
-            icon: position == 0 ? Icons.Close : (position == 100 ? Icons.Open : Icons.Stop),
-            extraData: new Dictionary<string, object?> { ["position"] = position },
-            onSuccess: OnServiceCallSucceeded));
-
-    private CommandContextItem CoverTiltPreset(HaEntity entity, int position) =>
-        new(new CallServiceCommand(
-            _client,
-            domain: "cover",
-            service: "set_cover_tilt_position",
-            entityId: entity.EntityId,
-            displayName: $"{position}%",
-            icon: position == 0 ? Icons.Close : (position == 100 ? Icons.Open : Icons.Stop),
-            extraData: new Dictionary<string, object?> { ["tilt_position"] = position },
-            onSuccess: OnServiceCallSucceeded));
-
     private CommandContextItem VolumePreset(HaEntity entity, int pct) =>
         new(new CallServiceCommand(
             _client,
@@ -937,19 +847,6 @@ internal sealed partial class EntityListPage : ListPage
             icon: Icons.Volume,
             // volume_level wants 0.0..1.0 — convert from percentage.
             extraData: new Dictionary<string, object?> { ["volume_level"] = pct / 100.0 },
-            onSuccess: OnServiceCallSucceeded));
-
-    private CommandContextItem FanSpeedPreset(HaEntity entity, int pct) =>
-        new(new CallServiceCommand(
-            _client,
-            domain: "fan",
-            // turn_on with percentage starts the fan if it was off (matches
-            // Raycast behaviour and avoids a no-op when state="off").
-            service: "turn_on",
-            entityId: entity.EntityId,
-            displayName: $"{pct}%",
-            icon: Icons.Fan,
-            extraData: new Dictionary<string, object?> { ["percentage"] = pct },
             onSuccess: OnServiceCallSucceeded));
 
     private CommandContextItem TemperaturePreset(HaEntity entity, double temp) =>
@@ -1019,7 +916,7 @@ internal sealed partial class EntityListPage : ListPage
     {
         var items = new List<IContextItem>(8);
 
-        if (entity.Domain is "light" or "fan" or "media_player")
+        if (entity.Domain is "light" or "media_player")
         {
             items.Add(new CommandContextItem(
                 new CallServiceCommand(_client, entity.Domain, "turn_on", entity.EntityId, $"Turn on {entity.FriendlyName}", icon: Icons.TurnOn, onSuccess: OnServiceCallSucceeded)));
@@ -1065,59 +962,6 @@ internal sealed partial class EntityListPage : ListPage
                     Title = "Set color…",
                     Icon = Icons.Brightness,
                     MoreCommands = colorItems,
-                });
-            }
-        }
-
-        if (entity.Domain == "fan")
-        {
-            // Gate speed actions by SET_SPEED bit (1) when supported_features
-            // is reported. If the attribute is missing, optimistically allow.
-            var sf = entity.Attributes.TryGetValue("supported_features", out var sfo) && sfo is long b ? b : -1;
-            var supportsSpeed = sf < 0 || (sf & 1) == 1;
-
-            if (supportsSpeed)
-            {
-                // Speed up / down — single step from current percentage.
-                // Skip when the device doesn't publish percentage_step or
-                // when the resulting value would clamp out of range.
-                var currentPct = entity.Attributes.TryGetValue("percentage", out var pv) ? pv switch { long l => (double)l, double d => d, _ => double.NaN } : double.NaN;
-                var step = entity.Attributes.TryGetValue("percentage_step", out var sv) ? sv switch { long l => (double)l, double d => d, _ => double.NaN } : double.NaN;
-                if (!double.IsNaN(currentPct) && !double.IsNaN(step) && step > 0)
-                {
-                    var up = (int)System.Math.Round(currentPct + step);
-                    var down = (int)System.Math.Round(currentPct - step);
-                    if (up <= 100)
-                    {
-                        items.Add(new CommandContextItem(
-                            new CallServiceCommand(_client, "fan", "turn_on", entity.EntityId, $"Speed up to {up}%", icon: Icons.Fan,
-                                extraData: new Dictionary<string, object?> { ["percentage"] = up },
-                                onSuccess: OnServiceCallSucceeded)));
-                    }
-                    if (down >= 0)
-                    {
-                        items.Add(new CommandContextItem(
-                            new CallServiceCommand(_client, "fan", "turn_on", entity.EntityId, $"Speed down to {down}%", icon: Icons.Fan,
-                                extraData: new Dictionary<string, object?> { ["percentage"] = down },
-                                onSuccess: OnServiceCallSucceeded)));
-                    }
-                }
-
-                // Set speed presets — mirrors lights' brightness shape.
-                // 0% is intentionally omitted because Turn Off already
-                // exists at the top of the menu.
-                var presets = new IContextItem[]
-                {
-                    FanSpeedPreset(entity, 25),
-                    FanSpeedPreset(entity, 50),
-                    FanSpeedPreset(entity, 75),
-                    FanSpeedPreset(entity, 100),
-                };
-                items.Add(new CommandContextItem(new NoOpCommand())
-                {
-                    Title = "Set speed…",
-                    Icon = Icons.Fan,
-                    MoreCommands = presets,
                 });
             }
         }
@@ -1352,60 +1196,6 @@ internal sealed partial class EntityListPage : ListPage
                         MoreCommands = modeItems,
                     });
                 }
-            }
-        }
-
-        if (entity.Domain == "cover")
-        {
-            items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, "cover", "open_cover", entity.EntityId, $"Open {entity.FriendlyName}", icon: Icons.Open, onSuccess: OnServiceCallSucceeded)));
-            items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, "cover", "close_cover", entity.EntityId, $"Close {entity.FriendlyName}", icon: Icons.Close, onSuccess: OnServiceCallSucceeded)));
-            items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, "cover", "stop_cover", entity.EntityId, $"Stop {entity.FriendlyName}", icon: Icons.Stop, onSuccess: OnServiceCallSucceeded)));
-
-            // Cover supported_features bits (HA CoverEntityFeature):
-            //   1 OPEN, 2 CLOSE, 4 SET_POSITION, 8 STOP, 16 OPEN_TILT,
-            //   32 CLOSE_TILT, 64 STOP_TILT, 128 SET_TILT_POSITION.
-            var coverSf = entity.Attributes.TryGetValue("supported_features", out var sf) && sf is long bits ? bits : -1;
-            bool CoverHas(long bit) => coverSf < 0 || (coverSf & bit) == bit;
-
-            // Position presets only when the cover supports set_cover_position.
-            if (CoverHas(4))
-            {
-                var presets = new IContextItem[]
-                {
-                    CoverPositionPreset(entity, 0),
-                    CoverPositionPreset(entity, 25),
-                    CoverPositionPreset(entity, 50),
-                    CoverPositionPreset(entity, 75),
-                    CoverPositionPreset(entity, 100),
-                };
-                items.Add(new CommandContextItem(new NoOpCommand())
-                {
-                    Title = "Set position…",
-                    Icon = Icons.Stop,
-                    MoreCommands = presets,
-                });
-            }
-
-            // Tilt position presets when the cover supports set_cover_tilt_position.
-            if (CoverHas(128))
-            {
-                var presets = new IContextItem[]
-                {
-                    CoverTiltPreset(entity, 0),
-                    CoverTiltPreset(entity, 25),
-                    CoverTiltPreset(entity, 50),
-                    CoverTiltPreset(entity, 75),
-                    CoverTiltPreset(entity, 100),
-                };
-                items.Add(new CommandContextItem(new NoOpCommand())
-                {
-                    Title = "Set tilt…",
-                    Icon = Icons.Stop,
-                    MoreCommands = presets,
-                });
             }
         }
 
