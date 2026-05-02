@@ -8,7 +8,7 @@ namespace HomeAssistantCommandPalette.Commands;
 
 internal sealed partial class CallServiceCommand : InvokableCommand
 {
-    private readonly HaApiClient _client;
+    private readonly IHaClient _client;
     private readonly string _domain;
     private readonly string _service;
     private readonly string _entityId;
@@ -17,7 +17,7 @@ internal sealed partial class CallServiceCommand : InvokableCommand
     private readonly Action? _onSuccess;
 
     public CallServiceCommand(
-        HaApiClient client,
+        IHaClient client,
         string domain,
         string service,
         string entityId,

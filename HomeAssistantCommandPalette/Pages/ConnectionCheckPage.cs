@@ -16,9 +16,9 @@ namespace HomeAssistantCommandPalette.Pages;
 internal sealed partial class ConnectionCheckPage : ListPage
 {
     private readonly HaSettings _settings;
-    private readonly HaApiClient _client;
+    private readonly IHaClient _client;
 
-    public ConnectionCheckPage(HaSettings settings, HaApiClient client)
+    public ConnectionCheckPage(HaSettings settings, IHaClient client)
     {
         _settings = settings;
         _client = client;

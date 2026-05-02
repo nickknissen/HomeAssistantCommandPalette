@@ -14,11 +14,11 @@ namespace HomeAssistantCommandPalette.Commands;
 /// </summary>
 internal sealed partial class AskAssistCommand : InvokableCommand
 {
-    private readonly HaApiClient _client;
+    private readonly IHaClient _client;
     private readonly string _query;
     private readonly Action<HaAssistResult> _onResult;
 
-    public AskAssistCommand(HaApiClient client, string query, Action<HaAssistResult> onResult)
+    public AskAssistCommand(IHaClient client, string query, Action<HaAssistResult> onResult)
     {
         _client = client;
         _query = query;

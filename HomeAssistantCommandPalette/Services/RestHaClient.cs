@@ -13,12 +13,13 @@ using Microsoft.Extensions.Caching.Memory;
 namespace HomeAssistantCommandPalette.Services;
 
 /// <summary>
-/// Thin REST client for the Home Assistant HTTP API:
+/// REST-based <see cref="IHaClient"/>: every operation maps to a single
+/// HTTP call against the Home Assistant API:
 ///   GET  /api/states                       → entity list
 ///   POST /api/services/{domain}/{service}  → call a service
 /// Auth: Bearer &lt;long-lived access token&gt;.
 /// </summary>
-public sealed partial class HaApiClient : IDisposable
+public sealed partial class RestHaClient : IHaClient
 {
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(10);
 
@@ -86,16 +87,13 @@ public sealed partial class HaApiClient : IDisposable
     /// </summary>
     public string LastAreaError { get; private set; } = string.Empty;
 
-    public HaApiClient(HaSettings settings)
+    public RestHaClient(HaSettings settings)
     {
         _settings = settings;
     }
 
     public HaQueryResult GetStates()
     {
-#if DEMO_MODE
-        return DemoHaData.Result();
-#else
         if (!_settings.IsConfigured)
         {
             return new HaQueryResult
@@ -118,11 +116,10 @@ public sealed partial class HaApiClient : IDisposable
             _cache.Set(StatesCacheKey, result, CacheTtl);
         }
         return result;
-#endif
     }
 
-    public bool TryCallService(string domain, string service, string entityId, out string error)
-        => TryCallService(domain, service, entityId, extraData: null, out error);
+    public bool TryCallService(string domain, string service, string entityId, out string errorMessage)
+        => TryCallService(domain, service, entityId, extraData: null, out errorMessage);
 
     /// <summary>
     /// Fetches the latest snapshot from <c>/api/camera_proxy/{entity_id}</c>
@@ -253,44 +250,6 @@ public sealed partial class HaApiClient : IDisposable
     }
 
     /// <summary>
-    /// Sweeps temp snapshot / entity-picture files older than one hour.
-    /// Called once at extension startup — the in-memory cache resets on
-    /// restart, so any file from a previous session is unreachable. The
-    /// 1 h threshold leaves a safety margin if a second CmdPal process
-    /// is racing the cleanup. Best-effort: a failure is silent.
-    /// </summary>
-    public static void CleanupStaleSnapshots()
-    {
-        var cutoff = DateTime.UtcNow - TimeSpan.FromHours(1);
-        foreach (var sub in new[] { "camera", "picture" })
-        {
-            try
-            {
-                var dir = Path.Combine(Path.GetTempPath(), "HomeAssistantCommandPalette", sub);
-                if (!Directory.Exists(dir)) continue;
-                foreach (var path in Directory.EnumerateFiles(dir))
-                {
-                    try
-                    {
-                        if (File.GetLastWriteTimeUtc(path) < cutoff)
-                        {
-                            File.Delete(path);
-                        }
-                    }
-                    catch
-                    {
-                        // File in use, locked, or vanished — skip it.
-                    }
-                }
-            }
-            catch
-            {
-                // Permission or I/O error reading the dir — skip the sweep.
-            }
-        }
-    }
-
-    /// <summary>
     /// Lists configured calendars via <c>GET /api/calendars</c>. Errors map
     /// to <see cref="HaErrorKind"/> the same way <see cref="GetStates"/>
     /// does so the calendar page can reuse the "press Enter to open
@@ -367,10 +326,10 @@ public sealed partial class HaApiClient : IDisposable
 
     /// <summary>
     /// Fetches events for a calendar between <paramref name="start"/> and
-    /// <paramref name="end"/>. Best-effort: any failure returns an empty
+    /// <paramref name="endTime"/>. Best-effort: any failure returns an empty
     /// list so a single broken calendar doesn't take the whole page down.
     /// </summary>
-    public IReadOnlyList<HaCalendarEvent> GetCalendarEvents(HaCalendar calendar, DateTimeOffset start, DateTimeOffset end)
+    public IReadOnlyList<HaCalendarEvent> GetCalendarEvents(HaCalendar calendar, DateTimeOffset start, DateTimeOffset endTime)
     {
         if (!_settings.IsConfigured) return Array.Empty<HaCalendarEvent>();
 
@@ -381,7 +340,7 @@ public sealed partial class HaApiClient : IDisposable
             // HA expects RFC 3339 / ISO 8601 with offset. The "o" round-trip
             // format on a UTC DateTimeOffset emits "2025-01-15T19:00:00.0000000+00:00".
             var startStr = start.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
-            var endStr = end.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
+            var endStr = endTime.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
             var url = $"{_settings.Url}/api/calendars/{Uri.EscapeDataString(calendar.EntityId)}?start={Uri.EscapeDataString(startStr)}&end={Uri.EscapeDataString(endStr)}";
             var response = client.GetAsync(url, cts.Token).GetAwaiter().GetResult();
             if (!response.IsSuccessStatusCode) return Array.Empty<HaCalendarEvent>();
@@ -585,12 +544,12 @@ public sealed partial class HaApiClient : IDisposable
         string service,
         string entityId,
         IReadOnlyDictionary<string, object?>? extraData,
-        out string error)
+        out string errorMessage)
     {
-        error = string.Empty;
+        errorMessage = string.Empty;
         if (!_settings.IsConfigured)
         {
-            error = "Home Assistant is not configured.";
+            errorMessage = "Home Assistant is not configured.";
             return false;
         }
 
@@ -604,7 +563,7 @@ public sealed partial class HaApiClient : IDisposable
             var response = client.PostAsync(url, content, cts.Token).GetAwaiter().GetResult();
             if (!response.IsSuccessStatusCode)
             {
-                error = $"HA returned {(int)response.StatusCode} {response.ReasonPhrase}";
+                errorMessage = $"HA returned {(int)response.StatusCode} {response.ReasonPhrase}";
                 return false;
             }
 
@@ -615,7 +574,7 @@ public sealed partial class HaApiClient : IDisposable
         }
         catch (Exception ex)
         {
-            error = ex.Message;
+            errorMessage = ex.Message;
             return false;
         }
     }
