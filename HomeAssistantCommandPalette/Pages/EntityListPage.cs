@@ -241,11 +241,7 @@ internal sealed partial class EntityListPage : ListPage
             Row("State", FormatStateWithUnit(entity)),
         };
 
-        if (entity.Domain == "light")
-        {
-            AddLightRows(entity, meta);
-        }
-        else if (entity.Domain == "media_player")
+        if (entity.Domain == "media_player")
         {
             AddMediaPlayerRows(entity, meta);
         }
@@ -412,60 +408,6 @@ internal sealed partial class EntityListPage : ListPage
         if (entity.Attributes.TryGetValue("state_class", out var sc) && sc is string scs && !string.IsNullOrEmpty(scs))
         {
             meta.Add(Row("State class", scs));
-        }
-    }
-
-    private static void AddLightRows(HaEntity entity, List<IDetailsElement> meta)
-    {
-        // brightness in HA states is 0-255
-        if (entity.Attributes.TryGetValue("brightness", out var b) && b is long br && br > 0)
-        {
-            meta.Add(Row("Brightness", $"{(int)System.Math.Round(br / 255.0 * 100)}%"));
-        }
-        if (entity.Attributes.TryGetValue("color_temp_kelvin", out var ctk) && ctk is long k && k > 0)
-        {
-            meta.Add(Row("Color temp", $"{k}K"));
-        }
-        // Min / max Kelvin range — only when both are reported. Helps the
-        // user know the bulb's tunable-white window without round-tripping
-        // to the HA UI. Some firmwares report only the legacy mireds pair,
-        // so fall back to mireds → kelvin (k = 1_000_000 / mired).
-        var minK = entity.Attributes.TryGetValue("min_color_temp_kelvin", out var mnk) && mnk is long mnki ? mnki : 0;
-        var maxK = entity.Attributes.TryGetValue("max_color_temp_kelvin", out var mxk) && mxk is long mxki ? mxki : 0;
-        if (minK == 0 && maxK == 0
-            && entity.Attributes.TryGetValue("min_mireds", out var mnm) && mnm is long mnmi && mnmi > 0
-            && entity.Attributes.TryGetValue("max_mireds", out var mxm) && mxm is long mxmi && mxmi > 0)
-        {
-            // k = 1_000_000 / mired. Smaller mired → higher kelvin, so the
-            // mired pair swaps: min Kelvin comes from max mireds.
-            minK = 1_000_000 / mxmi;
-            maxK = 1_000_000 / mnmi;
-        }
-        if (minK > 0 && maxK > 0)
-        {
-            meta.Add(Row("Color temp range", $"{minK}K – {maxK}K"));
-        }
-        // HA reports `rgb_color` as a 3-element list of ints (sometimes
-        // longs after JSON deserialization). Stringify each component so
-        // we don't end up rendering the .NET list's type name.
-        if (entity.Attributes.TryGetValue("rgb_color", out var rgb) && rgb is List<object?> rgbList && rgbList.Count == 3)
-        {
-            var parts = rgbList.Select(c => c switch
-            {
-                long l => l.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                int i => i.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                double d => ((int)System.Math.Round(d)).ToString(System.Globalization.CultureInfo.InvariantCulture),
-                _ => c?.ToString() ?? "?",
-            });
-            meta.Add(Row("RGB", string.Join(", ", parts)));
-        }
-        if (entity.Attributes.TryGetValue("color_mode", out var mode) && mode is string m && !string.IsNullOrEmpty(m))
-        {
-            meta.Add(Row("Color mode", m));
-        }
-        if (entity.Attributes.TryGetValue("effect", out var fx) && fx is string fxs && !string.IsNullOrEmpty(fxs) && !string.Equals(fxs, "none", System.StringComparison.OrdinalIgnoreCase))
-        {
-            meta.Add(Row("Effect", fxs));
         }
     }
 
@@ -644,19 +586,6 @@ internal sealed partial class EntityListPage : ListPage
     {
         var unavailable = string.Equals(entity.State, "unavailable", System.StringComparison.OrdinalIgnoreCase);
 
-        if (entity.Domain == "light")
-        {
-            // Detect a lights group via the standard HA `mdi:lightbulb-group`
-            // entity icon override. Falls back to a single bulb otherwise.
-            var isGroup = entity.Attributes.TryGetValue("icon", out var ic)
-                && ic is string s
-                && string.Equals(s, "mdi:lightbulb-group", System.StringComparison.OrdinalIgnoreCase);
-
-            if (unavailable) return isGroup ? Icons.LightGroupUnavailable : Icons.LightUnavailable;
-            if (entity.IsOn) return isGroup ? Icons.LightGroupOn : Icons.LightOn;
-            return isGroup ? Icons.LightGroupOff : Icons.LightOff;
-        }
-
         if (entity.Domain == "media_player")
         {
             if (unavailable) return Icons.MediaPlayerUnavailable;
@@ -792,50 +721,11 @@ internal sealed partial class EntityListPage : ListPage
         // for read-only or unsupported domains.
         return entity.Domain switch
         {
-            "light" or "media_player"
-                => new CallServiceCommand(_client, entity.Domain, "toggle", entity.EntityId, $"Toggle {entity.FriendlyName}", icon: Icons.Toggle, onSuccess: OnServiceCallSucceeded),
+            "media_player"
+                => new CallServiceCommand(_client, "media_player", "toggle", entity.EntityId, $"Toggle {entity.FriendlyName}", icon: Icons.Toggle, onSuccess: OnServiceCallSucceeded),
             _ => new OpenDashboardCommand(_settings, entity.EntityId),
         };
     }
-
-    private CommandContextItem BrightnessPreset(HaEntity entity, int pct) =>
-        new(new CallServiceCommand(
-            _client,
-            domain: "light",
-            service: "turn_on",
-            entityId: entity.EntityId,
-            displayName: $"{pct}%",
-            icon: Icons.Brightness,
-            extraData: new Dictionary<string, object?> { ["brightness_pct"] = pct },
-            onSuccess: OnServiceCallSucceeded));
-
-    // Preset palette for the light "Set color…" submenu. RGB triplets are
-    // pure primaries / secondaries so each option behaves the same on every
-    // RGB-capable bulb regardless of its colour-mode (rgb / rgbw / hs / xy
-    // — HA converts internally). Order mirrors a standard rainbow + white.
-    private static readonly (string Name, int[] Rgb)[] ColorPalette =
-    [
-        ("Red",    new[] { 255,   0,   0 }),
-        ("Orange", new[] { 255, 128,   0 }),
-        ("Yellow", new[] { 255, 255,   0 }),
-        ("Green",  new[] {   0, 255,   0 }),
-        ("Cyan",   new[] {   0, 255, 255 }),
-        ("Blue",   new[] {   0,   0, 255 }),
-        ("Purple", new[] { 128,   0, 255 }),
-        ("Pink",   new[] { 255,   0, 128 }),
-        ("White",  new[] { 255, 255, 255 }),
-    ];
-
-    private CommandContextItem ColorPreset(HaEntity entity, string name, int[] rgb) =>
-        new(new CallServiceCommand(
-            _client,
-            domain: "light",
-            service: "turn_on",
-            entityId: entity.EntityId,
-            displayName: name,
-            icon: Icons.Brightness,
-            extraData: new Dictionary<string, object?> { ["rgb_color"] = rgb },
-            onSuccess: OnServiceCallSucceeded));
 
     private CommandContextItem VolumePreset(HaEntity entity, int pct) =>
         new(new CallServiceCommand(
@@ -916,54 +806,12 @@ internal sealed partial class EntityListPage : ListPage
     {
         var items = new List<IContextItem>(8);
 
-        if (entity.Domain is "light" or "media_player")
+        if (entity.Domain is "media_player")
         {
             items.Add(new CommandContextItem(
                 new CallServiceCommand(_client, entity.Domain, "turn_on", entity.EntityId, $"Turn on {entity.FriendlyName}", icon: Icons.TurnOn, onSuccess: OnServiceCallSucceeded)));
             items.Add(new CommandContextItem(
                 new CallServiceCommand(_client, entity.Domain, "turn_off", entity.EntityId, $"Turn off {entity.FriendlyName}", icon: Icons.TurnOff, onSuccess: OnServiceCallSucceeded)));
-        }
-
-        // Light brightness presets — nested under a single "Set brightness"
-        // parent so the top-level context menu stays short. Each preset
-        // calls light.turn_on with brightness_pct (HA turns the light on
-        // at that level whether it was on or off).
-        if (entity.Domain == "light")
-        {
-            var presets = new IContextItem[]
-            {
-                BrightnessPreset(entity, 25),
-                BrightnessPreset(entity, 50),
-                BrightnessPreset(entity, 75),
-                BrightnessPreset(entity, 100),
-            };
-            items.Add(new CommandContextItem(new NoOpCommand())
-            {
-                Title = "Set brightness…",
-                Icon = Icons.Brightness,
-                MoreCommands = presets,
-            });
-
-            // RGB color picker — only when the bulb declares an RGB-capable
-            // colour mode. HA exposes capability via `supported_color_modes`
-            // (a list of strings). Modes that accept rgb_color: rgb, rgbw,
-            // rgbww, hs, xy. If the attribute is missing, skip the menu —
-            // older single-channel bulbs would error on rgb_color.
-            if (entity.Attributes.TryGetValue("supported_color_modes", out var modes)
-                && modes is List<object?> modeList
-                && modeList.OfType<string>().Any(m =>
-                    m is "rgb" or "rgbw" or "rgbww" or "hs" or "xy"))
-            {
-                var colorItems = ColorPalette
-                    .Select(c => (IContextItem)ColorPreset(entity, c.Name, c.Rgb))
-                    .ToArray();
-                items.Add(new CommandContextItem(new NoOpCommand())
-                {
-                    Title = "Set color…",
-                    Icon = Icons.Brightness,
-                    MoreCommands = colorItems,
-                });
-            }
         }
 
         if (entity.Domain == "media_player")
