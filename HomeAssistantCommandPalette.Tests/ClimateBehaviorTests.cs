@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using HomeAssistantCommandPalette.Pages.Domains;
 using HomeAssistantCommandPalette.Pages.Domains.Behaviors;
+using HomeAssistantCommandPalette.Pages.Domains.IconPipeline.Rules;
 using HomeAssistantCommandPalette.Services;
 using HomeAssistantCommandPalette.Tests.Fakes;
 using Microsoft.CommandPalette.Extensions;
@@ -89,13 +90,13 @@ public class ClimateBehaviorTests
     [InlineData("heat", "ClimateActive")]
     [InlineData("cool", "ClimateActive")]
     [InlineData("unavailable", "ClimateUnavailable")]
-    public void BuildIcon_picks_palette_from_state(string state, string _)
+    public void Rule_picks_palette_from_state(string state, string _)
     {
-        var (ctx, _2) = MakeCtx(state);
+        var entity = TestEntities.Make("climate.living", state, friendlyName: "Living");
         // Just assert it doesn't throw and returns *something*. Icon
         // identity comparisons aren't reliable since IconHelpers builds
         // a fresh IconInfo per call.
-        var icon = new ClimateBehavior().BuildIcon(in ctx);
+        var icon = new ClimateIconRule().Pick(entity);
         Assert.NotNull(icon);
     }
 

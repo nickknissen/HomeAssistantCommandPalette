@@ -13,20 +13,6 @@ public sealed class ClimateBehavior : DomainBehavior
 {
     public override string Domain => "climate";
 
-    public override IconInfo BuildIcon(in DomainCtx ctx)
-    {
-        var entity = ctx.Entity;
-        if (string.Equals(entity.State, "unavailable", StringComparison.OrdinalIgnoreCase))
-            return Icons.ClimateUnavailable;
-        return entity.State.ToLowerInvariant() switch
-        {
-            "off" => Icons.ClimateOff,
-            "auto" or "heat_cool" => Icons.ClimateAuto,
-            // heat / cool / dry / fan_only
-            _ => Icons.ClimateActive,
-        };
-    }
-
     public override void AddContextItems(in DomainCtx ctx, List<IContextItem> items)
     {
         var entity = ctx.Entity;

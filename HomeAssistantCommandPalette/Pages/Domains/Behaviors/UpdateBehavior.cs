@@ -14,14 +14,6 @@ public sealed class UpdateBehavior : DomainBehavior
 
     public override string Domain => "update";
 
-    public override IconInfo BuildIcon(in DomainCtx ctx)
-    {
-        if (string.Equals(ctx.Entity.State, "unavailable", StringComparison.OrdinalIgnoreCase))
-            return Icons.UpdateUnavailable;
-        // state="on" means an update is available — yellow draws the eye.
-        return ctx.Entity.IsOn ? Icons.UpdateOn : Icons.UpdateOff;
-    }
-
     public override void AddContextItems(in DomainCtx ctx, List<IContextItem> items)
     {
         var entity = ctx.Entity;

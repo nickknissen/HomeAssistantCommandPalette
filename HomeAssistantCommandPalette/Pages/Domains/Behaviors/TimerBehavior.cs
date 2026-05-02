@@ -10,16 +10,6 @@ public sealed class TimerBehavior : DomainBehavior
 {
     public override string Domain => "timer";
 
-    public override IconInfo BuildIcon(in DomainCtx ctx)
-    {
-        if (string.Equals(ctx.Entity.State, "unavailable", StringComparison.OrdinalIgnoreCase))
-            return Icons.TimerUnavailable;
-        // Yellow when active; blue for idle / paused. Mirrors Raycast.
-        return string.Equals(ctx.Entity.State, "active", StringComparison.OrdinalIgnoreCase)
-            ? Icons.TimerOn
-            : Icons.TimerOff;
-    }
-
     public override ICommand BuildPrimary(in DomainCtx ctx)
     {
         var name = ctx.Entity.FriendlyName;

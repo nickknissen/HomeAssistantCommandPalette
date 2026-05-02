@@ -5,6 +5,7 @@
 using System.Collections.Generic;
 using HomeAssistantCommandPalette.Commands;
 using HomeAssistantCommandPalette.Pages;
+using HomeAssistantCommandPalette.Pages.Domains.IconPipeline;
 using HomeAssistantCommandPalette.Services;
 using Microsoft.CommandPalette.Extensions;
 using Microsoft.CommandPalette.Extensions.Toolkit;
@@ -61,6 +62,7 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
 
     private readonly HaSettings _settings;
     private readonly IHaClient _apiClient;
+    private readonly IEntityIconResolver _iconResolver;
     private readonly ICommandItem[] _commands;
 
     public HomeAssistantCommandPaletteCommandsProvider()
@@ -78,6 +80,13 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
 #endif
         Settings = _settings.Settings;
 
+        // Single resolver shared by every EntityListPage. Pure rules are
+        // configured once at startup; the impure asset fetcher (today:
+        // person avatars) closes over the same IHaClient.
+        _iconResolver = new CompositeIconResolver(
+            new RegistryIconRules(IconRegistrations.Configure),
+            new HaClientAssetFetcher(_apiClient));
+
         // Sweep camera-snapshot / entity-picture temp files left over from
         // previous sessions — the in-memory cache reset on restart makes
         // them unreachable.
@@ -88,7 +97,7 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
         foreach (var page in DomainPages)
         {
             commands.Add(new CommandItem(new EntityListPage(
-                _settings, _apiClient, page.Title, page.Id, page.Domains, Icons.App,
+                _settings, _apiClient, _iconResolver, page.Title, page.Id, page.Domains, Icons.App,
                 page.DeviceClasses, page.SortByNumericStateAscending))
             {
                 Title = page.Title,

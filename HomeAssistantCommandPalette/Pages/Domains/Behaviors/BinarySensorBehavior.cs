@@ -8,9 +8,6 @@ public sealed class BinarySensorBehavior : DomainBehavior
 {
     public override string Domain => "binary_sensor";
 
-    public override IconInfo BuildIcon(in DomainCtx ctx)
-        => Icons.ForSensorDeviceClass("binary_sensor", ctx.Entity.State, ctx.Entity.Attributes);
-
     public override void AddDetailRows(in DomainCtx ctx, List<IDetailsElement> rows)
     {
         var entity = ctx.Entity;

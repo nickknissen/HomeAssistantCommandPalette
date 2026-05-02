@@ -7,12 +7,6 @@ public sealed class CameraBehavior : DomainBehavior
 {
     public override string Domain => "camera";
 
-    public override IconInfo BuildIcon(in DomainCtx ctx)
-    {
-        var unavailable = string.Equals(ctx.Entity.State, "unavailable", StringComparison.OrdinalIgnoreCase);
-        return unavailable ? Icons.CameraUnavailable : Icons.Camera;
-    }
-
     public override IconInfo? BuildHeroImage(in DomainCtx ctx)
     {
         // /api/camera_proxy/{entity_id} requires a Bearer header that

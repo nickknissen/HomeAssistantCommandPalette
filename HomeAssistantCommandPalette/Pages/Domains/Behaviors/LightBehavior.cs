@@ -30,22 +30,6 @@ public sealed class LightBehavior : DomainBehavior
 
     public override string Domain => "light";
 
-    public override IconInfo BuildIcon(in DomainCtx ctx)
-    {
-        var entity = ctx.Entity;
-        var unavailable = string.Equals(entity.State, "unavailable", StringComparison.OrdinalIgnoreCase);
-
-        // Detect a lights group via the standard HA `mdi:lightbulb-group`
-        // entity icon override. Falls back to a single bulb otherwise.
-        var isGroup = entity.Attributes.TryGetValue("icon", out var ic)
-            && ic is string s
-            && string.Equals(s, "mdi:lightbulb-group", StringComparison.OrdinalIgnoreCase);
-
-        if (unavailable) return isGroup ? Icons.LightGroupUnavailable : Icons.LightUnavailable;
-        if (entity.IsOn) return isGroup ? Icons.LightGroupOn : Icons.LightOn;
-        return isGroup ? Icons.LightGroupOff : Icons.LightOff;
-    }
-
     public override ICommand BuildPrimary(in DomainCtx ctx)
         => new CallServiceCommand(
             ctx.Client, "light", "toggle", ctx.Entity.EntityId,

@@ -10,17 +10,6 @@ public sealed class PersonBehavior : DomainBehavior
 {
     public override string Domain => "person";
 
-    public override IconInfo BuildIcon(in DomainCtx ctx)
-    {
-        if (string.Equals(ctx.Entity.State, "unavailable", StringComparison.OrdinalIgnoreCase))
-            return Icons.PersonUnavailable;
-        // state is the zone the person is in. "home" → yellow; any
-        // other zone (including "not_home") → blue.
-        return string.Equals(ctx.Entity.State, "home", StringComparison.OrdinalIgnoreCase)
-            ? Icons.PersonOn
-            : Icons.PersonOff;
-    }
-
     public override void AddContextItems(in DomainCtx ctx, List<IContextItem> items)
     {
         var entity = ctx.Entity;

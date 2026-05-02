@@ -1,8 +1,10 @@
 using System.Collections.Generic;
 using System.Linq;
 using HomeAssistantCommandPalette;
+using HomeAssistantCommandPalette.Models;
 using HomeAssistantCommandPalette.Pages.Domains;
 using HomeAssistantCommandPalette.Pages.Domains.Behaviors;
+using HomeAssistantCommandPalette.Pages.Domains.IconPipeline.Rules;
 using HomeAssistantCommandPalette.Services;
 using HomeAssistantCommandPalette.Tests.Fakes;
 using Microsoft.CommandPalette.Extensions;
@@ -12,11 +14,11 @@ namespace HomeAssistantCommandPalette.Tests;
 
 public class SensorBehaviorTests
 {
+    private static HaEntity MakeEntity(string state, IReadOnlyDictionary<string, object?>? attrs = null)
+        => TestEntities.Make("sensor.x", state, attributes: attrs);
+
     private static DomainCtx MakeCtx(string state, IReadOnlyDictionary<string, object?>? attrs = null)
-    {
-        var entity = TestEntities.Make("sensor.x", state, attributes: attrs);
-        return new DomainCtx(entity, new RecordingHaClient(), new HaSettings(), OnSuccess: () => { });
-    }
+        => new(MakeEntity(state, attrs), new RecordingHaClient(), new HaSettings(), OnSuccess: () => { });
 
     // -- Detail rows ---------------------------------------------------
 
@@ -57,32 +59,32 @@ public class SensorBehaviorTests
     [InlineData("100", "battery-full-off")]
     public void Battery_state_picks_bucket_and_tint(string state, string expectedStem)
     {
-        var ctx = MakeCtx(state, new Dictionary<string, object?>
+        var entity = MakeEntity(state, new Dictionary<string, object?>
         {
             ["device_class"] = "battery",
         });
-        var icon = new SensorBehavior().BuildIcon(in ctx);
+        var icon = new SensorIconRule().Pick(entity);
         Assert.Contains(expectedStem, IconAssert.PathOf(icon));
     }
 
     [Fact]
     public void Unparsable_battery_state_falls_back_to_static_icon()
     {
-        var ctx = MakeCtx("not-a-number", new Dictionary<string, object?>
+        var entity = MakeEntity("not-a-number", new Dictionary<string, object?>
         {
             ["device_class"] = "battery",
         });
-        IconAssert.Same(Icons.Battery, new SensorBehavior().BuildIcon(in ctx));
+        IconAssert.Same(Icons.Battery, new SensorIconRule().Pick(entity));
     }
 
     [Fact]
     public void Unavailable_battery_uses_unavailable_icon()
     {
-        var ctx = MakeCtx("unavailable", new Dictionary<string, object?>
+        var entity = MakeEntity("unavailable", new Dictionary<string, object?>
         {
             ["device_class"] = "battery",
         });
-        IconAssert.Same(Icons.BatteryUnavailable, new SensorBehavior().BuildIcon(in ctx));
+        IconAssert.Same(Icons.BatteryUnavailable, new SensorIconRule().Pick(entity));
     }
 
     // -- Numeric sensor device_class fallthrough ------------------------
@@ -107,39 +109,39 @@ public class SensorBehaviorTests
     [MemberData(nameof(NumericDeviceClasses))]
     public void Sensor_device_class_dispatches_to_expected_icon(string deviceClass, string expectedIconName)
     {
-        var ctx = MakeCtx("123", new Dictionary<string, object?>
+        var entity = MakeEntity("123", new Dictionary<string, object?>
         {
             ["device_class"] = deviceClass,
         });
-        var actual = new SensorBehavior().BuildIcon(in ctx);
+        var actual = new SensorIconRule().Pick(entity);
         IconAssert.Same(IconByName(expectedIconName), actual);
     }
 
     [Fact]
     public void Missing_device_class_falls_back_to_shape()
     {
-        var ctx = MakeCtx("123", attrs: null);
-        IconAssert.Same(Icons.Shape, new SensorBehavior().BuildIcon(in ctx));
+        var entity = MakeEntity("123", attrs: null);
+        IconAssert.Same(Icons.Shape, new SensorIconRule().Pick(entity));
     }
 
     [Fact]
     public void Unknown_device_class_falls_back_to_shape()
     {
-        var ctx = MakeCtx("123", new Dictionary<string, object?>
+        var entity = MakeEntity("123", new Dictionary<string, object?>
         {
             ["device_class"] = "wibble",
         });
-        IconAssert.Same(Icons.Shape, new SensorBehavior().BuildIcon(in ctx));
+        IconAssert.Same(Icons.Shape, new SensorIconRule().Pick(entity));
     }
 
     [Fact]
     public void Unavailable_unknown_device_class_falls_back_to_shape_unavailable()
     {
-        var ctx = MakeCtx("unavailable", new Dictionary<string, object?>
+        var entity = MakeEntity("unavailable", new Dictionary<string, object?>
         {
             ["device_class"] = "wibble",
         });
-        IconAssert.Same(Icons.ShapeUnavailable, new SensorBehavior().BuildIcon(in ctx));
+        IconAssert.Same(Icons.ShapeUnavailable, new SensorIconRule().Pick(entity));
     }
 
     [Theory]
@@ -151,11 +153,11 @@ public class SensorBehaviorTests
     [InlineData("carbon_dioxide", nameof(Icons.CarbonDioxideUnavailable))]
     public void Unavailable_known_device_class_uses_unavailable_variant(string deviceClass, string expectedIconName)
     {
-        var ctx = MakeCtx("unavailable", new Dictionary<string, object?>
+        var entity = MakeEntity("unavailable", new Dictionary<string, object?>
         {
             ["device_class"] = deviceClass,
         });
-        IconAssert.Same(IconByName(expectedIconName), new SensorBehavior().BuildIcon(in ctx));
+        IconAssert.Same(IconByName(expectedIconName), new SensorIconRule().Pick(entity));
     }
 
     private static IconInfo IconByName(string name)

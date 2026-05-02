@@ -43,15 +43,6 @@ public abstract class DomainBehavior
     public virtual void AddContextItems(in DomainCtx ctx, List<IContextItem> items) { }
 
     /// <summary>
-    /// State-tinted icon for the row. Default delegates to
-    /// <see cref="Icons.ForDomain(string, string)"/>; concrete behaviors
-    /// override when they need richer rules (sub-state palettes,
-    /// device_class dispatch, supported_features gating, …).
-    /// </summary>
-    public virtual IconInfo BuildIcon(in DomainCtx ctx)
-        => Icons.ForDomain(ctx.Entity.Domain, ctx.Entity.State);
-
-    /// <summary>
     /// Hero image for the details pane (e.g. camera snapshot). Returns
     /// <c>null</c> for domains without one — the overwhelming majority.
     /// </summary>
