@@ -34,6 +34,8 @@ public static class DomainRegistry
             ["person"]        = new PersonBehavior(),
             ["input_select"]  = new InputSelectBehavior(),
             ["input_number"]  = new InputNumberBehavior(),
+            ["cover"]         = new CoverBehavior(),
+            ["fan"]           = new FanBehavior(),
         };
 
     /// <summary>
