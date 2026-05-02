@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using HomeAssistantCommandPalette.Pages.Domains.Behaviors;
 
 namespace HomeAssistantCommandPalette.Pages.Domains;
 
@@ -26,6 +27,13 @@ public static class DomainRegistry
             ["button"]        = Domains.Activate("button", "press", "Press"),
             ["input_button"]  = Domains.Activate("input_button", "press", "Press"),
             ["counter"]       = Domains.Increment("counter"),
+            ["automation"]    = new AutomationBehavior(),
+            ["vacuum"]        = new VacuumBehavior(),
+            ["timer"]         = new TimerBehavior(),
+            ["update"]        = new UpdateBehavior(),
+            ["person"]        = new PersonBehavior(),
+            ["input_select"]  = new InputSelectBehavior(),
+            ["input_number"]  = new InputNumberBehavior(),
         };
 
     /// <summary>
