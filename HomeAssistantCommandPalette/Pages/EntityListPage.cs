@@ -150,7 +150,18 @@ internal sealed partial class EntityListPage : ListPage
 
         var ctxItems = new List<IContextItem>(8);
         behavior.AddContextItems(in ctx, ctxItems);
-        ctxItems.Add(new CommandContextItem(new OpenDashboardCommand(_settings, entity.EntityId)));
+
+        // Tail items mirror the legacy BuildContextCommands tail: Open
+        // dashboard (skipped when it'd duplicate the primary action) and
+        // Copy entity ID always last.
+        if (primary is not OpenDashboardCommand)
+        {
+            ctxItems.Add(new CommandContextItem(new OpenDashboardCommand(_settings, entity.EntityId)));
+        }
+        ctxItems.Add(new CommandContextItem(new CopyTextCommand(entity.EntityId)
+        {
+            Name = "Copy entity ID",
+        }));
 
         var details = new Details
         {
@@ -938,18 +949,6 @@ internal sealed partial class EntityListPage : ListPage
             return entity.IsOn ? Icons.FanOn : Icons.FanOff;
         }
 
-        if (entity.Domain == "switch")
-        {
-            if (unavailable) return Icons.SwitchUnavailable;
-            return entity.IsOn ? Icons.SwitchOn : Icons.SwitchOff;
-        }
-
-        if (entity.Domain == "input_boolean")
-        {
-            if (unavailable) return Icons.InputBooleanUnavailable;
-            return entity.IsOn ? Icons.InputBooleanOn : Icons.InputBooleanOff;
-        }
-
         if (entity.Domain == "timer")
         {
             if (unavailable) return Icons.TimerUnavailable;
@@ -957,12 +956,6 @@ internal sealed partial class EntityListPage : ListPage
             return string.Equals(entity.State, "active", System.StringComparison.OrdinalIgnoreCase)
                 ? Icons.TimerOn
                 : Icons.TimerOff;
-        }
-
-        if (entity.Domain == "script")
-        {
-            if (unavailable) return Icons.ScriptUnavailable;
-            return entity.IsOn ? Icons.ScriptOn : Icons.ScriptOff;
         }
 
         if (entity.Domain == "update")
@@ -990,15 +983,11 @@ internal sealed partial class EntityListPage : ListPage
                 : Icons.SunDay;
         }
 
-        if (entity.Domain == "scene") return unavailable ? Icons.SceneUnavailable : Icons.Scene;
         if (entity.Domain == "zone") return unavailable ? Icons.ZoneUnavailable : Icons.Zone;
         if (entity.Domain == "camera") return unavailable ? Icons.CameraUnavailable : Icons.Camera;
-        if (entity.Domain == "counter") return unavailable ? Icons.CounterUnavailable : Icons.Counter;
-        if (entity.Domain == "button") return unavailable ? Icons.ButtonUnavailable : Icons.Button;
         if (entity.Domain == "weather") return Icons.WeatherForCondition(entity.State, unavailable);
 
         if (entity.Domain == "input_select") return Icons.InputSelect;
-        if (entity.Domain == "input_button") return Icons.InputButton;
         if (entity.Domain == "input_number") return Icons.InputNumber;
         if (entity.Domain == "input_text") return Icons.InputText;
         if (entity.Domain == "input_datetime")
@@ -1104,14 +1093,8 @@ internal sealed partial class EntityListPage : ListPage
         // for read-only or unsupported domains.
         return entity.Domain switch
         {
-            "light" or "switch" or "fan" or "input_boolean" or "automation" or "group" or "cover" or "media_player"
+            "light" or "fan" or "automation" or "cover" or "media_player"
                 => new CallServiceCommand(_client, entity.Domain, "toggle", entity.EntityId, $"Toggle {entity.FriendlyName}", icon: Icons.Toggle, onSuccess: OnServiceCallSucceeded),
-            "scene"
-                => new CallServiceCommand(_client, "scene", "turn_on", entity.EntityId, $"Activate {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded),
-            "script"
-                => new CallServiceCommand(_client, "script", "turn_on", entity.EntityId, $"Run {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded),
-            "button" or "input_button"
-                => new CallServiceCommand(_client, entity.Domain, "press", entity.EntityId, $"Press {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded),
             "vacuum"
                 => string.Equals(entity.State, "cleaning", System.StringComparison.OrdinalIgnoreCase)
                     ? new CallServiceCommand(_client, "vacuum", "pause", entity.EntityId, $"Pause {entity.FriendlyName}", icon: Icons.Pause, onSuccess: OnServiceCallSucceeded)
@@ -1120,8 +1103,6 @@ internal sealed partial class EntityListPage : ListPage
                 => string.Equals(entity.State, "active", System.StringComparison.OrdinalIgnoreCase)
                     ? new CallServiceCommand(_client, "timer", "pause", entity.EntityId, $"Pause {entity.FriendlyName}", icon: Icons.Pause, onSuccess: OnServiceCallSucceeded)
                     : new CallServiceCommand(_client, "timer", "start", entity.EntityId, $"Start {entity.FriendlyName}", icon: Icons.Play, onSuccess: OnServiceCallSucceeded),
-            "counter"
-                => new CallServiceCommand(_client, "counter", "increment", entity.EntityId, $"Increment {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded),
             _ => new OpenDashboardCommand(_settings, entity.EntityId),
         };
     }
@@ -1279,7 +1260,7 @@ internal sealed partial class EntityListPage : ListPage
     {
         var items = new List<IContextItem>(8);
 
-        if (entity.Domain is "light" or "switch" or "fan" or "input_boolean" or "automation" or "group" or "media_player")
+        if (entity.Domain is "light" or "fan" or "automation" or "media_player")
         {
             items.Add(new CommandContextItem(
                 new CallServiceCommand(_client, entity.Domain, "turn_on", entity.EntityId, $"Turn on {entity.FriendlyName}", icon: Icons.TurnOn, onSuccess: OnServiceCallSucceeded)));
@@ -1858,19 +1839,6 @@ internal sealed partial class EntityListPage : ListPage
                     new CallServiceCommand(_client, "timer", "finish", entity.EntityId,
                         $"Finish {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
             }
-        }
-
-        if (entity.Domain == "counter")
-        {
-            items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, "counter", "increment", entity.EntityId,
-                    $"Increment {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
-            items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, "counter", "decrement", entity.EntityId,
-                    $"Decrement {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
-            items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, "counter", "reset", entity.EntityId,
-                    $"Reset {entity.FriendlyName}", onSuccess: OnServiceCallSucceeded)));
         }
 
         if (entity.Domain == "person")

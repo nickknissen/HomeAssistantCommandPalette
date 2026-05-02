@@ -19,12 +19,20 @@ public class DomainRegistryTests
         Assert.Null(b);
     }
 
-    [Fact]
-    public void TryGet_switch_returns_registered_behavior()
+    [Theory]
+    [InlineData("switch")]
+    [InlineData("input_boolean")]
+    [InlineData("group")]
+    [InlineData("scene")]
+    [InlineData("script")]
+    [InlineData("button")]
+    [InlineData("input_button")]
+    [InlineData("counter")]
+    public void TryGet_returns_a_behavior_carrying_the_requested_domain(string domain)
     {
-        var found = DomainRegistry.TryGet("switch", out var b);
+        var found = DomainRegistry.TryGet(domain, out var b);
         Assert.True(found);
         Assert.NotNull(b);
-        Assert.Equal("switch", b!.Domain);
+        Assert.Equal(domain, b!.Domain);
     }
 }
