@@ -241,11 +241,7 @@ internal sealed partial class EntityListPage : ListPage
             Row("State", FormatStateWithUnit(entity)),
         };
 
-        if (entity.Domain == "media_player")
-        {
-            AddMediaPlayerRows(entity, meta);
-        }
-        else if (entity.Domain == "weather")
+        if (entity.Domain == "weather")
         {
             AddWeatherRows(entity, meta);
         }
@@ -427,94 +423,6 @@ internal sealed partial class EntityListPage : ListPage
     }
 
 
-    private static double? TryGetSeconds(IReadOnlyDictionary<string, object?> attrs, string key) =>
-        attrs.TryGetValue(key, out var v)
-            ? v switch { double d => d, long l => (double)l, _ => (double?)null }
-            : null;
-
-    /// <summary>
-    /// Renders a duration in seconds as MM:SS, or H:MM:SS when ≥ 1 hour.
-    /// </summary>
-    private static string FormatTimecode(double totalSeconds)
-    {
-        var s = (long)System.Math.Round(totalSeconds);
-        var hours = s / 3600;
-        var minutes = (s % 3600) / 60;
-        var seconds = s % 60;
-        return hours > 0
-            ? $"{hours}:{minutes:D2}:{seconds:D2}"
-            : $"{minutes}:{seconds:D2}";
-    }
-
-    private static void AddMediaPlayerRows(HaEntity entity, List<IDetailsElement> meta)
-    {
-        if (entity.Attributes.TryGetValue("media_title", out var title) && title is string ts && !string.IsNullOrEmpty(ts))
-        {
-            meta.Add(Row("Track", ts));
-        }
-        if (entity.Attributes.TryGetValue("media_artist", out var artist) && artist is string ars && !string.IsNullOrEmpty(ars))
-        {
-            meta.Add(Row("Artist", ars));
-        }
-        if (entity.Attributes.TryGetValue("media_album_name", out var album) && album is string als && !string.IsNullOrEmpty(als))
-        {
-            meta.Add(Row("Album", als));
-        }
-        // Position / Duration as MM:SS — when state="playing", advance the
-        // reported position by (now - media_position_updated_at) so the row
-        // doesn't lag the actual playback by the full list-cache window.
-        var posSeconds = TryGetSeconds(entity.Attributes, "media_position");
-        var durSeconds = TryGetSeconds(entity.Attributes, "media_duration");
-        if (posSeconds is double pos && durSeconds is double dur && dur > 0)
-        {
-            if (string.Equals(entity.State, "playing", System.StringComparison.OrdinalIgnoreCase)
-                && entity.Attributes.TryGetValue("media_position_updated_at", out var puat)
-                && puat is string puatS
-                && System.DateTimeOffset.TryParse(puatS, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var updated))
-            {
-                var elapsed = (System.DateTimeOffset.UtcNow - updated).TotalSeconds;
-                if (elapsed > 0) pos += elapsed;
-            }
-            if (pos < 0) pos = 0;
-            if (pos > dur) pos = dur;
-            meta.Add(Row("Position", $"{FormatTimecode(pos)} / {FormatTimecode(dur)}"));
-        }
-        if (entity.Attributes.TryGetValue("source", out var source) && source is string src && !string.IsNullOrEmpty(src))
-        {
-            meta.Add(Row("Source", src));
-        }
-        if (entity.Attributes.TryGetValue("sound_mode", out var sm) && sm is string sms && !string.IsNullOrEmpty(sms))
-        {
-            meta.Add(Row("Sound mode", sms));
-        }
-        if (entity.Attributes.TryGetValue("shuffle", out var shuf) && shuf is bool sb)
-        {
-            meta.Add(Row("Shuffle", sb ? "on" : "off"));
-        }
-        if (entity.Attributes.TryGetValue("repeat", out var rep) && rep is string reps && !string.IsNullOrEmpty(reps))
-        {
-            meta.Add(Row("Repeat", reps));
-        }
-        // volume_level is 0.0..1.0
-        if (entity.Attributes.TryGetValue("volume_level", out var vol) && vol is double v)
-        {
-            meta.Add(Row("Volume", $"{(int)System.Math.Round(v * 100)}%"));
-        }
-        else if (entity.Attributes.TryGetValue("volume_level", out var vol2) && vol2 is long lv)
-        {
-            meta.Add(Row("Volume", $"{lv * 100}%"));
-        }
-        if (entity.Attributes.TryGetValue("is_volume_muted", out var muted) && muted is bool m)
-        {
-            meta.Add(Row("Muted", m ? "yes" : "no"));
-        }
-        if (entity.Attributes.TryGetValue("app_name", out var app) && app is string apps && !string.IsNullOrEmpty(apps))
-        {
-            meta.Add(Row("App", apps));
-        }
-    }
-
-
     private static DetailsElement Row(string key, string value) => new()
     {
         Key = key,
@@ -525,15 +433,7 @@ internal sealed partial class EntityListPage : ListPage
     {
         var unavailable = string.Equals(entity.State, "unavailable", System.StringComparison.OrdinalIgnoreCase);
 
-        if (entity.Domain == "media_player")
-        {
-            if (unavailable) return Icons.MediaPlayerUnavailable;
-            return string.Equals(entity.State, "playing", System.StringComparison.OrdinalIgnoreCase)
-                ? Icons.MediaPlayerPlaying
-                : Icons.MediaPlayerIdle;
-        }
-
-if (entity.EntityId == "sun.sun")
+        if (entity.EntityId == "sun.sun")
         {
             if (unavailable) return Icons.SunUnavailable;
             return string.Equals(entity.State, "below_horizon", System.StringComparison.OrdinalIgnoreCase)
@@ -643,180 +543,15 @@ if (entity.EntityId == "sun.sun")
         return unavailable ? Icons.ShapeUnavailable : Icons.Shape;
     }
 
-    private ICommand BuildPrimaryCommand(HaEntity entity)
-    {
-        // Default action picked per-domain. Falls back to "open in dashboard"
-        // for read-only or unsupported domains.
-        return entity.Domain switch
-        {
-            "media_player"
-                => new CallServiceCommand(_client, "media_player", "toggle", entity.EntityId, $"Toggle {entity.FriendlyName}", icon: Icons.Toggle, onSuccess: OnServiceCallSucceeded),
-            _ => new OpenDashboardCommand(_settings, entity.EntityId),
-        };
-    }
-
-    private CommandContextItem VolumePreset(HaEntity entity, int pct) =>
-        new(new CallServiceCommand(
-            _client,
-            domain: "media_player",
-            service: "volume_set",
-            entityId: entity.EntityId,
-            displayName: $"{pct}%",
-            icon: Icons.Volume,
-            // volume_level wants 0.0..1.0 — convert from percentage.
-            extraData: new Dictionary<string, object?> { ["volume_level"] = pct / 100.0 },
-            onSuccess: OnServiceCallSucceeded));
+    private OpenDashboardCommand BuildPrimaryCommand(HaEntity entity)
+        // Legacy fallback for unmigrated domains. Every domain that still
+        // flows through this path is read-only (no toggle / press service)
+        // — so opening the dashboard is the correct primary action.
+        => new(_settings, entity.EntityId);
 
     private IContextItem[] BuildContextCommands(HaEntity entity, ICommand primary)
     {
         var items = new List<IContextItem>(8);
-
-        if (entity.Domain is "media_player")
-        {
-            items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, entity.Domain, "turn_on", entity.EntityId, $"Turn on {entity.FriendlyName}", icon: Icons.TurnOn, onSuccess: OnServiceCallSucceeded)));
-            items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, entity.Domain, "turn_off", entity.EntityId, $"Turn off {entity.FriendlyName}", icon: Icons.TurnOff, onSuccess: OnServiceCallSucceeded)));
-        }
-
-        if (entity.Domain == "media_player")
-        {
-            items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, "media_player", "media_play_pause", entity.EntityId, $"Play / Pause {entity.FriendlyName}", icon: Icons.PlayPause, onSuccess: OnServiceCallSucceeded)));
-            items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, "media_player", "media_play", entity.EntityId, $"Play {entity.FriendlyName}", icon: Icons.Play, onSuccess: OnServiceCallSucceeded)));
-            items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, "media_player", "media_pause", entity.EntityId, $"Pause {entity.FriendlyName}", icon: Icons.Pause, onSuccess: OnServiceCallSucceeded)));
-            items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, "media_player", "media_stop", entity.EntityId, $"Stop {entity.FriendlyName}", icon: Icons.Stop, onSuccess: OnServiceCallSucceeded)));
-            items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, "media_player", "media_next_track", entity.EntityId, $"Next track on {entity.FriendlyName}", icon: Icons.Next, onSuccess: OnServiceCallSucceeded)));
-            items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, "media_player", "media_previous_track", entity.EntityId, $"Previous track on {entity.FriendlyName}", icon: Icons.Previous, onSuccess: OnServiceCallSucceeded)));
-            items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, "media_player", "volume_up", entity.EntityId, $"Volume up on {entity.FriendlyName}", icon: Icons.VolumeUp, onSuccess: OnServiceCallSucceeded)));
-            items.Add(new CommandContextItem(
-                new CallServiceCommand(_client, "media_player", "volume_down", entity.EntityId, $"Volume down on {entity.FriendlyName}", icon: Icons.VolumeDown, onSuccess: OnServiceCallSucceeded)));
-
-            // Mute toggle — read current is_volume_muted to flip it. Skip if
-            // unknown (not all media_players publish the attribute).
-            if (entity.Attributes.TryGetValue("is_volume_muted", out var muted) && muted is bool isMuted)
-            {
-                items.Add(new CommandContextItem(
-                    new CallServiceCommand(
-                        _client,
-                        domain: "media_player",
-                        service: "volume_mute",
-                        entityId: entity.EntityId,
-                        displayName: isMuted ? $"Unmute {entity.FriendlyName}" : $"Mute {entity.FriendlyName}",
-                        icon: Icons.VolumeMute,
-                        extraData: new Dictionary<string, object?> { ["is_volume_muted"] = !isMuted },
-                        onSuccess: OnServiceCallSucceeded)));
-            }
-
-            // supported_features bits on media_player. Values from HA's
-            // media_player component:
-            //   1 PAUSE, 2 SEEK, 4 VOLUME_SET, 8 VOLUME_MUTE, 16 PREVIOUS_TRACK,
-            //   32 NEXT_TRACK, 128 TURN_ON, 256 TURN_OFF, 512 PLAY_MEDIA,
-            //   1024 VOLUME_STEP, 2048 SELECT_SOURCE, 4096 STOP, 16384 PLAY,
-            //   32768 SHUFFLE_SET, 65536 SELECT_SOUND_MODE, 262144 REPEAT_SET.
-            var mpsf = entity.Attributes.TryGetValue("supported_features", out var sfo2) && sfo2 is long mpb ? mpb : -1;
-            bool MpHas(long bit) => mpsf < 0 || (mpsf & bit) == bit;
-
-            // Volume presets — only when the entity supports volume_set.
-            if (MpHas(4))
-            {
-                var presets = new IContextItem[]
-                {
-                    VolumePreset(entity, 25),
-                    VolumePreset(entity, 50),
-                    VolumePreset(entity, 75),
-                    VolumePreset(entity, 100),
-                };
-                items.Add(new CommandContextItem(new NoOpCommand())
-                {
-                    Title = "Set volume…",
-                    Icon = Icons.Volume,
-                    MoreCommands = presets,
-                });
-            }
-
-            // Shuffle toggle — flip the current `shuffle` bool. Skip when the
-            // attribute is missing (some players publish only when supported).
-            if (MpHas(32768) && entity.Attributes.TryGetValue("shuffle", out var sh) && sh is bool isShuffling)
-            {
-                items.Add(new CommandContextItem(
-                    new CallServiceCommand(
-                        _client,
-                        domain: "media_player",
-                        service: "shuffle_set",
-                        entityId: entity.EntityId,
-                        displayName: isShuffling ? $"Disable shuffle on {entity.FriendlyName}" : $"Enable shuffle on {entity.FriendlyName}",
-                        icon: Icons.PlayPause,
-                        extraData: new Dictionary<string, object?> { ["shuffle"] = !isShuffling },
-                        onSuccess: OnServiceCallSucceeded)));
-            }
-
-            // Repeat submenu — fixed set of options the HA service accepts.
-            if (MpHas(262144))
-            {
-                var repeatOptions = new[] { "off", "one", "all" };
-                var repeatItems = repeatOptions
-                    .Select(r => (IContextItem)new CommandContextItem(new CallServiceCommand(
-                        _client, "media_player", "repeat_set", entity.EntityId,
-                        r, extraData: new Dictionary<string, object?> { ["repeat"] = r },
-                        onSuccess: OnServiceCallSucceeded)))
-                    .ToArray();
-                items.Add(new CommandContextItem(new NoOpCommand())
-                {
-                    Title = "Set repeat…",
-                    Icon = Icons.PlayPause,
-                    MoreCommands = repeatItems,
-                });
-            }
-
-            // Source submenu — populated from the entity's `source_list`.
-            if (MpHas(2048) && entity.Attributes.TryGetValue("source_list", out var sl) && sl is List<object?> sources)
-            {
-                var sourceItems = sources
-                    .OfType<string>()
-                    .Select(s => (IContextItem)new CommandContextItem(new CallServiceCommand(
-                        _client, "media_player", "select_source", entity.EntityId,
-                        s, extraData: new Dictionary<string, object?> { ["source"] = s },
-                        onSuccess: OnServiceCallSucceeded)))
-                    .ToArray();
-                if (sourceItems.Length > 0)
-                {
-                    items.Add(new CommandContextItem(new NoOpCommand())
-                    {
-                        Title = "Select source…",
-                        Icon = Icons.Volume,
-                        MoreCommands = sourceItems,
-                    });
-                }
-            }
-
-            // Sound mode submenu — same shape, gated on SELECT_SOUND_MODE.
-            if (MpHas(65536) && entity.Attributes.TryGetValue("sound_mode_list", out var sml) && sml is List<object?> soundModes)
-            {
-                var soundItems = soundModes
-                    .OfType<string>()
-                    .Select(s => (IContextItem)new CommandContextItem(new CallServiceCommand(
-                        _client, "media_player", "select_sound_mode", entity.EntityId,
-                        s, extraData: new Dictionary<string, object?> { ["sound_mode"] = s },
-                        onSuccess: OnServiceCallSucceeded)))
-                    .ToArray();
-                if (soundItems.Length > 0)
-                {
-                    items.Add(new CommandContextItem(new NoOpCommand())
-                    {
-                        Title = "Select sound mode…",
-                        Icon = Icons.Volume,
-                        MoreCommands = soundItems,
-                    });
-                }
-            }
-        }
 
         // Skip the dashboard context item when it'd duplicate the primary
         // action (sensors, climate, weather, etc. fall through to dashboard).

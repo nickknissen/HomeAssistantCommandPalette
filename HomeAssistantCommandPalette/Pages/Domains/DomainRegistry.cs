@@ -38,6 +38,7 @@ public static class DomainRegistry
             ["fan"]           = new FanBehavior(),
             ["light"]         = new LightBehavior(),
             ["climate"]       = new ClimateBehavior(),
+            ["media_player"]  = new MediaPlayerBehavior(),
         };
 
     /// <summary>
