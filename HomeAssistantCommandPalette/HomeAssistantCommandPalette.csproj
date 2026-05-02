@@ -65,6 +65,7 @@
       <_Parameter1>CommitHash</_Parameter1>
       <_Parameter2>$(SourceRevisionId)</_Parameter2>
     </AssemblyAttribute>
+    <InternalsVisibleTo Include="HomeAssistantCommandPalette.Tests" />
   </ItemGroup>
 
   <PropertyGroup Condition="'$(ExtraDefineConstants)' != ''">
