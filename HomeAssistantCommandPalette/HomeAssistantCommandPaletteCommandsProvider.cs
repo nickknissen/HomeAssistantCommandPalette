@@ -60,7 +60,7 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
     ];
 
     private readonly HaSettings _settings;
-    private readonly HaApiClient _apiClient;
+    private readonly IHaClient _apiClient;
     private readonly ICommandItem[] _commands;
 
     public HomeAssistantCommandPaletteCommandsProvider()
@@ -69,13 +69,19 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
         Icon = Icons.App;
 
         _settings = new HaSettings();
-        _apiClient = new HaApiClient(_settings);
+#if DEMO_MODE
+        // Screenshot / Microsoft Store mode — every IHaClient call is
+        // served from the canned fixtures in DemoHaClient. No network.
+        _apiClient = new DemoHaClient();
+#else
+        _apiClient = new RestHaClient(_settings);
+#endif
         Settings = _settings.Settings;
 
         // Sweep camera-snapshot / entity-picture temp files left over from
         // previous sessions — the in-memory cache reset on restart makes
         // them unreachable.
-        HaApiClient.CleanupStaleSnapshots();
+        HaTempFiles.CleanupStaleSnapshots();
 
         var commands = new List<ICommandItem>(DomainPages.Length + 1);
 

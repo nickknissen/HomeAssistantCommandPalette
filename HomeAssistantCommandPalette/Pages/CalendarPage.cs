@@ -17,14 +17,14 @@ namespace HomeAssistantCommandPalette.Pages;
 internal sealed partial class CalendarPage : ListPage
 {
     private readonly HaSettings _settings;
-    private readonly HaApiClient _client;
+    private readonly IHaClient _client;
 
     // 7 days lines up with how a typical calendar UI renders an at-a-glance
     // upcoming view. Far enough to plan around, short enough that a noisy
     // calendar doesn't overwhelm the list.
     private static readonly TimeSpan LookaheadWindow = TimeSpan.FromDays(7);
 
-    public CalendarPage(HaSettings settings, HaApiClient client)
+    public CalendarPage(HaSettings settings, IHaClient client)
     {
         _settings = settings;
         _client = client;

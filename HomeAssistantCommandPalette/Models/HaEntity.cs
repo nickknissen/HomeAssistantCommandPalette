@@ -18,7 +18,7 @@ public sealed class HaEntity
     /// <summary>
     /// HA "area" (room) the entity is assigned to via the device/entity
     /// registry. Resolved out-of-band from <c>/api/template</c> and stitched
-    /// onto the entity in <see cref="HomeAssistantCommandPalette.Services.HaApiClient"/>.
+    /// onto the entity in <see cref="HomeAssistantCommandPalette.Services.RestHaClient"/>.
     /// Null when the entity has no area assigned.
     /// </summary>
     public string? AreaName { get; init; }
