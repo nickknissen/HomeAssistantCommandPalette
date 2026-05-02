@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 
 namespace HomeAssistantCommandPalette.Pages.Domains;
 
@@ -8,17 +9,34 @@ namespace HomeAssistantCommandPalette.Pages.Domains;
 /// <see cref="Default"/>, whose virtuals match the page's pre-refactor
 /// fallback (Open dashboard primary, no extra rows / context items).
 /// Entity-id overrides (e.g. <c>sun.sun</c>) take precedence over the
-/// domain map and land in a later PR alongside the first override.
+/// domain map and land alongside the first override in a later PR.
 /// </summary>
-internal static class DomainRegistry
+public static class DomainRegistry
 {
     public static readonly DomainBehavior Default = new DefaultBehavior();
 
     private static readonly Dictionary<string, DomainBehavior> Map =
-        new(StringComparer.Ordinal);
+        new(StringComparer.Ordinal)
+        {
+            ["switch"] = Domains.Toggle("switch"),
+        };
 
+    /// <summary>
+    /// Returns the registered behavior for <paramref name="domain"/>, or
+    /// <see cref="Default"/> when no entry exists.
+    /// </summary>
     public static DomainBehavior For(string domain)
         => Map.TryGetValue(domain, out var b) ? b : Default;
+
+    /// <summary>
+    /// Tries to get a registered (non-default) behavior. Used by the page
+    /// during incremental migration: only domains present in the map go
+    /// through <see cref="DomainBehavior"/>; everything else still flows
+    /// through the legacy dispatch sites until those branches are
+    /// migrated.
+    /// </summary>
+    public static bool TryGet(string domain, [NotNullWhen(true)] out DomainBehavior? behavior)
+        => Map.TryGetValue(domain, out behavior);
 
     private sealed class DefaultBehavior : DomainBehavior
     {

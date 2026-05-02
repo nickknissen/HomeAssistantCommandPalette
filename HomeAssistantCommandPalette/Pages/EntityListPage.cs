@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using HomeAssistantCommandPalette.Commands;
 using HomeAssistantCommandPalette.Models;
+using HomeAssistantCommandPalette.Pages.Domains;
 using HomeAssistantCommandPalette.Services;
 using Microsoft.CommandPalette.Extensions;
 using Microsoft.CommandPalette.Extensions.Toolkit;
@@ -116,6 +117,15 @@ internal sealed partial class EntityListPage : ListPage
 
     private ListItem CreateItem(HaEntity entity)
     {
+        // Domains migrated to the new abstraction render through their
+        // DomainBehavior; everything else still flows through the legacy
+        // dispatch sites (BuildPrimaryCommand / BuildContextCommands /
+        // BuildDetails / IconForEntity) until those branches move.
+        if (DomainRegistry.TryGet(entity.Domain, out var behavior))
+        {
+            return CreateItemViaBehavior(entity, behavior);
+        }
+
         var primary = BuildPrimaryCommand(entity);
         return new ListItem(primary)
         {
@@ -128,6 +138,62 @@ internal sealed partial class EntityListPage : ListPage
         };
     }
 
+    private ListItem CreateItemViaBehavior(HaEntity entity, DomainBehavior behavior)
+    {
+        var ctx = new DomainCtx(entity, _client, _settings, OnServiceCallSucceeded);
+
+        var primary = behavior.BuildPrimary(in ctx);
+
+        var rows = new List<IDetailsElement> { Row("State", FormatStateWithUnit(entity)) };
+        behavior.AddDetailRows(in ctx, rows);
+        AppendCommonRows(entity, rows);
+
+        var ctxItems = new List<IContextItem>(8);
+        behavior.AddContextItems(in ctx, ctxItems);
+        ctxItems.Add(new CommandContextItem(new OpenDashboardCommand(_settings, entity.EntityId)));
+
+        var details = new Details
+        {
+            Title = entity.FriendlyName,
+            Metadata = rows.ToArray(),
+        };
+        // Only assign HeroImage when the behavior produces one — the
+        // toolkit type rejects null assignment, and the overwhelming
+        // majority of behaviors don't render a hero.
+        var hero = behavior.BuildHeroImage(in ctx);
+        if (hero is not null) details.HeroImage = hero;
+
+        return new ListItem(primary)
+        {
+            Title = entity.FriendlyName,
+            Subtitle = BuildSubtitle(entity),
+            Tags = BuildTags(entity),
+            Icon = ResolveEntityIcon(entity, behavior.BuildIcon(in ctx)),
+            MoreCommands = ctxItems.ToArray(),
+            Details = details,
+        };
+    }
+
+    private static void AppendCommonRows(HaEntity entity, List<IDetailsElement> meta)
+    {
+        if (!string.IsNullOrEmpty(entity.AreaName))
+        {
+            meta.Add(Row("Area", entity.AreaName));
+        }
+
+        if (entity.LastChanged is DateTimeOffset changed)
+        {
+            meta.Add(Row("Last changed", FormatRelativeTime(changed)));
+        }
+
+        if (entity.Attributes.TryGetValue("attribution", out var att) && att is string atts && !string.IsNullOrEmpty(atts))
+        {
+            meta.Add(Row("Attribution", atts));
+        }
+
+        meta.Add(Row("Entity ID", entity.EntityId));
+    }
+
     /// <summary>
     /// Wraps <see cref="IconForEntity"/> with instance-level fallbacks that
     /// need authenticated HTTP. Persons get their <c>entity_picture</c>
@@ -135,6 +201,15 @@ internal sealed partial class EntityListPage : ListPage
     /// we drop back to the state-tinted account glyph.
     /// </summary>
     private IconInfo ResolveEntityIcon(HaEntity entity)
+        => ResolveEntityIcon(entity, IconForEntity(entity));
+
+    /// <summary>
+    /// Wraps a behavior-supplied icon with the page-level person-avatar
+    /// fallback. Persons get their <c>entity_picture</c> avatar (Gravatar
+    /// or HA-served) when one is set; if the fetch fails we drop back to
+    /// the supplied icon.
+    /// </summary>
+    private IconInfo ResolveEntityIcon(HaEntity entity, IconInfo fallback)
     {
         if (entity.Domain == "person"
             && entity.Attributes.TryGetValue("entity_picture", out var pic)
@@ -145,7 +220,7 @@ internal sealed partial class EntityListPage : ListPage
             if (path is not null) return new IconInfo(path);
         }
 
-        return IconForEntity(entity);
+        return fallback;
     }
 
     private Details BuildDetails(HaEntity entity)
