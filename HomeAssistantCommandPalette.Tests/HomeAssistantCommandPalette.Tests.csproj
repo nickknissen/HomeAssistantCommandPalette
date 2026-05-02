@@ -14,8 +14,10 @@
     <PublishSingleFile>false</PublishSingleFile>
     <IsAotCompatible>false</IsAotCompatible>
     <EnableMsixTooling>false</EnableMsixTooling>
-    <!-- xUnit conventionally uses snake_case test method names. -->
-    <NoWarn>$(NoWarn);CA1707</NoWarn>
+    <!-- xUnit conventionally uses snake_case test method names. CA1861
+         flags inline array literals as repeatedly-allocated; in one-shot
+         test bodies this is fine. -->
+    <NoWarn>$(NoWarn);CA1707;CA1861</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
