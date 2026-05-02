@@ -162,6 +162,10 @@ internal static class Icons
             "button"        => unavailable ? ButtonUnavailable        : Button,
             "input_button"  => InputButton,
             "counter"       => unavailable ? CounterUnavailable       : Counter,
+            // Behaviors with sub-state palettes (vacuum/timer/automation/
+            // update/person) override BuildIcon directly; their entries
+            // here are unreachable but kept for symmetry / fallback when
+            // a behavior is unregistered.
             _               => unavailable ? ShapeUnavailable         : Shape,
         };
     }
