@@ -37,6 +37,7 @@ public static class DomainRegistry
             ["cover"]         = new CoverBehavior(),
             ["fan"]           = new FanBehavior(),
             ["light"]         = new LightBehavior(),
+            ["climate"]       = new ClimateBehavior(),
         };
 
     /// <summary>
