@@ -8,16 +8,18 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using HomeAssistantCommandPalette.Models;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace HomeAssistantCommandPalette.Services;
 
 /// <summary>
-/// Thin REST client for the Home Assistant HTTP API:
+/// REST-based <see cref="IHaClient"/>: every operation maps to a single
+/// HTTP call against the Home Assistant API:
 ///   GET  /api/states                       → entity list
 ///   POST /api/services/{domain}/{service}  → call a service
 /// Auth: Bearer &lt;long-lived access token&gt;.
 /// </summary>
-public sealed partial class HaApiClient : IDisposable
+public sealed partial class RestHaClient : IHaClient
 {
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(10);
 
@@ -28,30 +30,26 @@ public sealed partial class HaApiClient : IDisposable
     private string _clientToken = string.Empty;
     private bool _clientIgnoreCerts;
 
-    private readonly object _cacheLock = new();
-    private HaQueryResult? _cachedResult;
-    private DateTime _cachedAtUtc = DateTime.MinValue;
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(3);
+    // Single MemoryCache backs all per-request caching. Keys are namespaced
+    // by prefix so the four logical caches don't collide.
+    private readonly MemoryCache _cache = new(new MemoryCacheOptions());
 
-    private readonly object _areaCacheLock = new();
-    private Dictionary<string, string>? _cachedAreaMap;
-    private DateTime _areaCachedAtUtc = DateTime.MinValue;
+    private const string StatesCacheKey = "states";
+    private const string AreaMapCacheKey = "area-map";
+    private const string CameraKeyPrefix = "camera:";
+    private const string PictureKeyPrefix = "picture:";
+
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(3);
     // Areas rarely change — keep them around longer than the state cache.
     private static readonly TimeSpan AreaCacheTtl = TimeSpan.FromMinutes(5);
     // When a fetch fails or returns no areas, retry sooner instead of
     // sitting on a useless cached result for 5 minutes. Covers the case
     // where the user is fixing their HA config in another tab.
     private static readonly TimeSpan AreaEmptyRetryTtl = TimeSpan.FromSeconds(30);
-
-    private readonly object _cameraCacheLock = new();
-    private readonly Dictionary<string, (string Path, DateTime FetchedAtUtc)> _cameraCache = new(StringComparer.Ordinal);
     // Match Raycast's default camera refresh cadence — short enough that
     // re-opening the page shows recent video, long enough to dedupe back-
     // to-back GetItems calls on the same page render.
     private static readonly TimeSpan CameraSnapshotTtl = TimeSpan.FromSeconds(5);
-
-    private readonly object _pictureCacheLock = new();
-    private readonly Dictionary<string, (string Url, string Path, DateTime FetchedAtUtc)> _pictureCache = new(StringComparer.Ordinal);
     // Avatars / entity pictures change rarely. A long TTL keeps repeat
     // page renders cheap; if the picture is updated in HA it'll surface on
     // the next CmdPal restart.
@@ -89,16 +87,13 @@ public sealed partial class HaApiClient : IDisposable
     /// </summary>
     public string LastAreaError { get; private set; } = string.Empty;
 
-    public HaApiClient(HaSettings settings)
+    public RestHaClient(HaSettings settings)
     {
         _settings = settings;
     }
 
     public HaQueryResult GetStates()
     {
-#if DEMO_MODE
-        return DemoHaData.Result();
-#else
         if (!_settings.IsConfigured)
         {
             return new HaQueryResult
@@ -109,27 +104,22 @@ public sealed partial class HaApiClient : IDisposable
             };
         }
 
-        lock (_cacheLock)
+        if (_cache.TryGetValue(StatesCacheKey, out HaQueryResult? cached) && cached is { HasError: false })
         {
-            if (_cachedResult is { HasError: false } && DateTime.UtcNow - _cachedAtUtc < CacheTtl)
-            {
-                return _cachedResult;
-            }
+            return cached;
         }
 
         var result = FetchStates();
-
-        lock (_cacheLock)
+        // Only cache successful results; an error should retry on next call.
+        if (!result.HasError)
         {
-            _cachedResult = result;
-            _cachedAtUtc = DateTime.UtcNow;
-            return result;
+            _cache.Set(StatesCacheKey, result, CacheTtl);
         }
-#endif
+        return result;
     }
 
-    public bool TryCallService(string domain, string service, string entityId, out string error)
-        => TryCallService(domain, service, entityId, extraData: null, out error);
+    public bool TryCallService(string domain, string service, string entityId, out string errorMessage)
+        => TryCallService(domain, service, entityId, extraData: null, out errorMessage);
 
     /// <summary>
     /// Fetches the latest snapshot from <c>/api/camera_proxy/{entity_id}</c>
@@ -143,14 +133,12 @@ public sealed partial class HaApiClient : IDisposable
     {
         if (string.IsNullOrEmpty(entityId) || !_settings.IsConfigured) return null;
 
-        lock (_cameraCacheLock)
+        var cacheKey = CameraKeyPrefix + entityId;
+        if (_cache.TryGetValue(cacheKey, out string? cachedPath)
+            && !string.IsNullOrEmpty(cachedPath)
+            && File.Exists(cachedPath))
         {
-            if (_cameraCache.TryGetValue(entityId, out var entry)
-                && DateTime.UtcNow - entry.FetchedAtUtc < CameraSnapshotTtl
-                && File.Exists(entry.Path))
-            {
-                return entry.Path;
-            }
+            return cachedPath;
         }
 
         try
@@ -179,10 +167,7 @@ public sealed partial class HaApiClient : IDisposable
             var path = Path.Combine(dir, $"{safe}.{ext}");
             File.WriteAllBytes(path, bytes);
 
-            lock (_cameraCacheLock)
-            {
-                _cameraCache[entityId] = (path, DateTime.UtcNow);
-            }
+            _cache.Set(cacheKey, path, CameraSnapshotTtl);
             return path;
         }
         catch
@@ -206,15 +191,15 @@ public sealed partial class HaApiClient : IDisposable
         if (string.IsNullOrEmpty(entityId) || string.IsNullOrEmpty(entityPicture) || !_settings.IsConfigured)
             return null;
 
-        lock (_pictureCacheLock)
+        // Composite key: when HA rotates the entity_picture URL, the old
+        // entry naturally falls out of the cache rather than being served
+        // until the TTL expires.
+        var cacheKey = PictureKeyPrefix + entityId + "|" + entityPicture;
+        if (_cache.TryGetValue(cacheKey, out string? cachedPath)
+            && !string.IsNullOrEmpty(cachedPath)
+            && File.Exists(cachedPath))
         {
-            if (_pictureCache.TryGetValue(entityId, out var entry)
-                && entry.Url == entityPicture
-                && DateTime.UtcNow - entry.FetchedAtUtc < EntityPictureTtl
-                && File.Exists(entry.Path))
-            {
-                return entry.Path;
-            }
+            return cachedPath;
         }
 
         try
@@ -255,53 +240,12 @@ public sealed partial class HaApiClient : IDisposable
             var path = Path.Combine(dir, $"{safe}.{ext}");
             File.WriteAllBytes(path, bytes);
 
-            lock (_pictureCacheLock)
-            {
-                _pictureCache[entityId] = (entityPicture, path, DateTime.UtcNow);
-            }
+            _cache.Set(cacheKey, path, EntityPictureTtl);
             return path;
         }
         catch
         {
             return null;
-        }
-    }
-
-    /// <summary>
-    /// Sweeps temp snapshot / entity-picture files older than one hour.
-    /// Called once at extension startup — the in-memory cache resets on
-    /// restart, so any file from a previous session is unreachable. The
-    /// 1 h threshold leaves a safety margin if a second CmdPal process
-    /// is racing the cleanup. Best-effort: a failure is silent.
-    /// </summary>
-    public static void CleanupStaleSnapshots()
-    {
-        var cutoff = DateTime.UtcNow - TimeSpan.FromHours(1);
-        foreach (var sub in new[] { "camera", "picture" })
-        {
-            try
-            {
-                var dir = Path.Combine(Path.GetTempPath(), "HomeAssistantCommandPalette", sub);
-                if (!Directory.Exists(dir)) continue;
-                foreach (var path in Directory.EnumerateFiles(dir))
-                {
-                    try
-                    {
-                        if (File.GetLastWriteTimeUtc(path) < cutoff)
-                        {
-                            File.Delete(path);
-                        }
-                    }
-                    catch
-                    {
-                        // File in use, locked, or vanished — skip it.
-                    }
-                }
-            }
-            catch
-            {
-                // Permission or I/O error reading the dir — skip the sweep.
-            }
         }
     }
 
@@ -382,10 +326,10 @@ public sealed partial class HaApiClient : IDisposable
 
     /// <summary>
     /// Fetches events for a calendar between <paramref name="start"/> and
-    /// <paramref name="end"/>. Best-effort: any failure returns an empty
+    /// <paramref name="endTime"/>. Best-effort: any failure returns an empty
     /// list so a single broken calendar doesn't take the whole page down.
     /// </summary>
-    public IReadOnlyList<HaCalendarEvent> GetCalendarEvents(HaCalendar calendar, DateTimeOffset start, DateTimeOffset end)
+    public IReadOnlyList<HaCalendarEvent> GetCalendarEvents(HaCalendar calendar, DateTimeOffset start, DateTimeOffset endTime)
     {
         if (!_settings.IsConfigured) return Array.Empty<HaCalendarEvent>();
 
@@ -396,7 +340,7 @@ public sealed partial class HaApiClient : IDisposable
             // HA expects RFC 3339 / ISO 8601 with offset. The "o" round-trip
             // format on a UTC DateTimeOffset emits "2025-01-15T19:00:00.0000000+00:00".
             var startStr = start.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
-            var endStr = end.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
+            var endStr = endTime.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
             var url = $"{_settings.Url}/api/calendars/{Uri.EscapeDataString(calendar.EntityId)}?start={Uri.EscapeDataString(startStr)}&end={Uri.EscapeDataString(endStr)}";
             var response = client.GetAsync(url, cts.Token).GetAwaiter().GetResult();
             if (!response.IsSuccessStatusCode) return Array.Empty<HaCalendarEvent>();
@@ -412,89 +356,39 @@ public sealed partial class HaApiClient : IDisposable
 
     private static IReadOnlyList<HaCalendar> ParseCalendars(string json)
     {
-        using var doc = JsonDocument.Parse(json);
-        if (doc.RootElement.ValueKind != JsonValueKind.Array) return Array.Empty<HaCalendar>();
-        var list = new List<HaCalendar>();
-        foreach (var el in doc.RootElement.EnumerateArray())
+        var dtos = JsonSerializer.Deserialize(json, HaJsonContext.Default.ListHaCalendarDto);
+        if (dtos is null) return Array.Empty<HaCalendar>();
+        var list = new List<HaCalendar>(dtos.Count);
+        foreach (var dto in dtos)
         {
-            if (el.ValueKind != JsonValueKind.Object) continue;
-            var entityId = el.TryGetProperty("entity_id", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null;
-            if (string.IsNullOrEmpty(entityId)) continue;
-            var name = el.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() ?? entityId : entityId;
-            list.Add(new HaCalendar(entityId, name));
+            if (string.IsNullOrEmpty(dto.EntityId)) continue;
+            list.Add(new HaCalendar(dto.EntityId, string.IsNullOrEmpty(dto.Name) ? dto.EntityId : dto.Name));
         }
         return list;
     }
 
     private static IReadOnlyList<HaCalendarEvent> ParseCalendarEvents(string json, HaCalendar calendar)
     {
-        using var doc = JsonDocument.Parse(json);
-        if (doc.RootElement.ValueKind != JsonValueKind.Array) return Array.Empty<HaCalendarEvent>();
-        var list = new List<HaCalendarEvent>();
-        foreach (var el in doc.RootElement.EnumerateArray())
+        var dtos = JsonSerializer.Deserialize(json, HaJsonContext.Default.ListHaCalendarEventDto);
+        if (dtos is null) return Array.Empty<HaCalendarEvent>();
+        var list = new List<HaCalendarEvent>(dtos.Count);
+        foreach (var dto in dtos)
         {
-            if (el.ValueKind != JsonValueKind.Object) continue;
-            var summary = el.TryGetProperty("summary", out var s) && s.ValueKind == JsonValueKind.String ? s.GetString() ?? "(no title)" : "(no title)";
-            if (!TryReadCalendarTime(el, "start", out var start, out var startAllDay)) continue;
-            if (!TryReadCalendarTime(el, "end", out var end, out _)) end = start;
-            var description = el.TryGetProperty("description", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : null;
-            var location = el.TryGetProperty("location", out var l) && l.ValueKind == JsonValueKind.String ? l.GetString() : null;
+            // Skip events with unparseable start times — same behaviour as
+            // the previous hand-rolled parser.
+            if (dto.Start is null) continue;
+            var end = dto.End ?? dto.Start;
             list.Add(new HaCalendarEvent(
-                calendar.EntityId, calendar.Name, summary, start, end, startAllDay,
-                string.IsNullOrEmpty(description) ? null : description,
-                string.IsNullOrEmpty(location) ? null : location));
+                calendar.EntityId,
+                calendar.Name,
+                string.IsNullOrEmpty(dto.Summary) ? "(no title)" : dto.Summary,
+                dto.Start.Value,
+                end.Value,
+                dto.Start.AllDay,
+                string.IsNullOrEmpty(dto.Description) ? null : dto.Description,
+                string.IsNullOrEmpty(dto.Location) ? null : dto.Location));
         }
         return list;
-    }
-
-    // HA has shipped two on-the-wire shapes for calendar event times:
-    //   1. Newer REST: a flat ISO string ("2025-01-15T19:00:00+00:00" or
-    //      "2025-01-15" for all-day events).
-    //   2. Older / WS-derived: an object {"dateTime": "..."} or {"date": "..."}.
-    // Accept both.
-    private static bool TryReadCalendarTime(JsonElement parent, string key, out DateTimeOffset value, out bool allDay)
-    {
-        value = default;
-        allDay = false;
-        if (!parent.TryGetProperty(key, out var prop)) return false;
-
-        string? raw = null;
-        if (prop.ValueKind == JsonValueKind.String)
-        {
-            raw = prop.GetString();
-            allDay = raw is { Length: > 0 } && !raw.Contains('T');
-        }
-        else if (prop.ValueKind == JsonValueKind.Object)
-        {
-            if (prop.TryGetProperty("dateTime", out var dt) && dt.ValueKind == JsonValueKind.String)
-            {
-                raw = dt.GetString();
-            }
-            else if (prop.TryGetProperty("date", out var d) && d.ValueKind == JsonValueKind.String)
-            {
-                raw = d.GetString();
-                allDay = true;
-            }
-        }
-        if (string.IsNullOrEmpty(raw)) return false;
-
-        if (allDay)
-        {
-            // "2025-01-15" — parse as a local-day boundary at 00:00.
-            if (DateTime.TryParseExact(raw, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var d))
-            {
-                value = new DateTimeOffset(d, TimeZoneInfo.Local.GetUtcOffset(d));
-                return true;
-            }
-            return false;
-        }
-
-        if (DateTimeOffset.TryParse(raw, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var dto))
-        {
-            value = dto;
-            return true;
-        }
-        return false;
     }
 
     /// <summary>
@@ -557,33 +451,19 @@ public sealed partial class HaApiClient : IDisposable
 
     private static HaAssistResult ParseAssistResponse(string json)
     {
-        using var doc = JsonDocument.Parse(json);
-        var root = doc.RootElement;
-        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("response", out var resp))
+        var dto = JsonSerializer.Deserialize(json, HaJsonContext.Default.HaAssistDto);
+        var resp = dto?.Response;
+        if (resp is null)
         {
             return new HaAssistResult(false, string.Empty, null, "Unexpected response shape.");
         }
 
-        string? responseType = resp.TryGetProperty("response_type", out var rt) && rt.ValueKind == JsonValueKind.String
-            ? rt.GetString()
-            : null;
-
-        var speech = string.Empty;
-        if (resp.TryGetProperty("speech", out var sp)
-            && sp.ValueKind == JsonValueKind.Object
-            && sp.TryGetProperty("plain", out var plain)
-            && plain.ValueKind == JsonValueKind.Object
-            && plain.TryGetProperty("speech", out var speechProp)
-            && speechProp.ValueKind == JsonValueKind.String)
-        {
-            speech = speechProp.GetString() ?? string.Empty;
-        }
-
-        var isError = string.Equals(responseType, "error", StringComparison.OrdinalIgnoreCase);
+        var speech = resp.Speech?.Plain?.Speech ?? string.Empty;
+        var isError = string.Equals(resp.ResponseType, "error", StringComparison.OrdinalIgnoreCase);
         return new HaAssistResult(
             Success: !isError,
             Speech: speech,
-            ResponseType: responseType,
+            ResponseType: resp.ResponseType,
             Error: isError ? (string.IsNullOrEmpty(speech) ? "Assist returned an error." : speech) : null);
     }
 
@@ -624,11 +504,9 @@ public sealed partial class HaApiClient : IDisposable
             }
 
             var json = response.Content.ReadAsStringAsync(cts.Token).GetAwaiter().GetResult();
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-            string? Read(string name) => root.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
+            var dto = JsonSerializer.Deserialize(json, HaJsonContext.Default.HaConfigDto);
             return new HaConfigProbe(true, HaErrorKind.None, null,
-                Read("version"), Read("location_name"), Read("time_zone"), Read("state"),
+                dto?.Version, dto?.LocationName, dto?.TimeZone, dto?.State,
                 elapsed);
         }
         catch (UriFormatException)
@@ -666,12 +544,12 @@ public sealed partial class HaApiClient : IDisposable
         string service,
         string entityId,
         IReadOnlyDictionary<string, object?>? extraData,
-        out string error)
+        out string errorMessage)
     {
-        error = string.Empty;
+        errorMessage = string.Empty;
         if (!_settings.IsConfigured)
         {
-            error = "Home Assistant is not configured.";
+            errorMessage = "Home Assistant is not configured.";
             return false;
         }
 
@@ -685,21 +563,18 @@ public sealed partial class HaApiClient : IDisposable
             var response = client.PostAsync(url, content, cts.Token).GetAwaiter().GetResult();
             if (!response.IsSuccessStatusCode)
             {
-                error = $"HA returned {(int)response.StatusCode} {response.ReasonPhrase}";
+                errorMessage = $"HA returned {(int)response.StatusCode} {response.ReasonPhrase}";
                 return false;
             }
 
             // Service call succeeded — invalidate cached states so the UI refresh
             // picks up the new state on the next GetItems().
-            lock (_cacheLock)
-            {
-                _cachedResult = null;
-            }
+            _cache.Remove(StatesCacheKey);
             return true;
         }
         catch (Exception ex)
         {
-            error = ex.Message;
+            errorMessage = ex.Message;
             return false;
         }
     }
@@ -855,21 +730,9 @@ public sealed partial class HaApiClient : IDisposable
     // network blip) resolves to null so the caller continues without areas.
     private Dictionary<string, string>? LoadAreaMapBestEffort()
     {
-        lock (_areaCacheLock)
+        if (_cache.TryGetValue(AreaMapCacheKey, out Dictionary<string, string>? cached))
         {
-            if (_cachedAreaMap is not null && DateTime.UtcNow - _areaCachedAtUtc < AreaCacheTtl)
-            {
-                return _cachedAreaMap;
-            }
-            // Empty/null cache: retry sooner so the user isn't stuck for
-            // 5 min after fixing area assignments in HA.
-            var emptyTtl = (_cachedAreaMap is null || _cachedAreaMap.Count == 0)
-                ? AreaEmptyRetryTtl
-                : AreaCacheTtl;
-            if (_cachedAreaMap is not null && DateTime.UtcNow - _areaCachedAtUtc < emptyTtl)
-            {
-                return _cachedAreaMap;
-            }
+            return cached;
         }
 
         try
@@ -921,7 +784,7 @@ public sealed partial class HaApiClient : IDisposable
         var trimmed = raw.Trim();
         if (trimmed.Length >= 2 && trimmed[0] == '"' && trimmed[^1] == '"')
         {
-            try { trimmed = JsonDocument.Parse(trimmed).RootElement.GetString() ?? trimmed; }
+            try { trimmed = JsonSerializer.Deserialize(trimmed, HaJsonContext.Default.String) ?? trimmed; }
             catch { /* leave as-is */ }
         }
 
@@ -930,16 +793,13 @@ public sealed partial class HaApiClient : IDisposable
 
         try
         {
-            using var doc = JsonDocument.Parse(trimmed);
-            if (doc.RootElement.ValueKind != JsonValueKind.Array) return map;
-            foreach (var pair in doc.RootElement.EnumerateArray())
+            var pairs = JsonSerializer.Deserialize(trimmed, HaJsonContext.Default.ListListString);
+            if (pairs is null) return map;
+            foreach (var pair in pairs)
             {
-                if (pair.ValueKind != JsonValueKind.Array || pair.GetArrayLength() < 2) continue;
-                var idEl = pair[0];
-                var areaEl = pair[1];
-                if (idEl.ValueKind != JsonValueKind.String || areaEl.ValueKind != JsonValueKind.String) continue;
-                var id = idEl.GetString();
-                var area = areaEl.GetString();
+                if (pair is null || pair.Count < 2) continue;
+                var id = pair[0];
+                var area = pair[1];
                 if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(area))
                 {
                     map[id] = area;
@@ -953,58 +813,46 @@ public sealed partial class HaApiClient : IDisposable
 
     private void CacheAreas(Dictionary<string, string>? map, string error)
     {
-        lock (_areaCacheLock)
-        {
-            _cachedAreaMap = map;
-            _areaCachedAtUtc = DateTime.UtcNow;
-            LastAreaCount = map is null ? -1 : map.Count;
-            LastAreaError = error;
-        }
+        // Empty / null map → retry sooner so the user isn't stuck for 5 min
+        // after fixing area assignments in HA. A populated map gets the
+        // long TTL since areas rarely change.
+        var ttl = (map is null || map.Count == 0) ? AreaEmptyRetryTtl : AreaCacheTtl;
+        _cache.Set(AreaMapCacheKey, map, ttl);
+        LastAreaCount = map is null ? -1 : map.Count;
+        LastAreaError = error;
     }
 
     private static List<HaEntity> ParseStates(string json)
     {
-        var list = new List<HaEntity>();
-        using var doc = JsonDocument.Parse(json);
-        if (doc.RootElement.ValueKind != JsonValueKind.Array)
-        {
-            return list;
-        }
+        var dtos = JsonSerializer.Deserialize(json, HaJsonContext.Default.ListHaStateDto);
+        var list = new List<HaEntity>(dtos?.Count ?? 0);
+        if (dtos is null) return list;
 
-        foreach (var el in doc.RootElement.EnumerateArray())
+        foreach (var dto in dtos)
         {
-            var entityId = el.TryGetProperty("entity_id", out var idEl) ? idEl.GetString() ?? string.Empty : string.Empty;
-            if (string.IsNullOrEmpty(entityId)) continue;
-
-            var state = el.TryGetProperty("state", out var stEl) ? stEl.GetString() ?? string.Empty : string.Empty;
+            if (string.IsNullOrEmpty(dto.EntityId)) continue;
 
             var attrs = new Dictionary<string, object?>(StringComparer.Ordinal);
-            if (el.TryGetProperty("attributes", out var attrEl) && attrEl.ValueKind == JsonValueKind.Object)
+            if (dto.Attributes is not null)
             {
-                foreach (var prop in attrEl.EnumerateObject())
+                foreach (var (key, value) in dto.Attributes)
                 {
-                    attrs[prop.Name] = ToObject(prop.Value);
+                    attrs[key] = ToObject(value);
                 }
             }
 
             list.Add(new HaEntity
             {
-                EntityId = entityId,
-                State = state,
+                EntityId = dto.EntityId,
+                State = dto.State ?? string.Empty,
                 Attributes = attrs,
-                LastChanged = ReadDate(el, "last_changed"),
-                LastUpdated = ReadDate(el, "last_updated"),
+                LastChanged = dto.LastChanged,
+                LastUpdated = dto.LastUpdated,
             });
         }
 
         list.Sort((a, b) => string.Compare(a.FriendlyName, b.FriendlyName, StringComparison.OrdinalIgnoreCase));
         return list;
-    }
-
-    private static DateTimeOffset? ReadDate(JsonElement el, string name)
-    {
-        if (!el.TryGetProperty(name, out var prop) || prop.ValueKind != JsonValueKind.String) return null;
-        return DateTimeOffset.TryParse(prop.GetString(), out var dt) ? dt : null;
     }
 
     private static object? ToObject(JsonElement el) => el.ValueKind switch
@@ -1079,5 +927,6 @@ public sealed partial class HaApiClient : IDisposable
             _client?.Dispose();
             _client = null;
         }
+        _cache.Dispose();
     }
 }

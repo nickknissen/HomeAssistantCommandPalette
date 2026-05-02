@@ -17,14 +17,14 @@ namespace HomeAssistantCommandPalette.Pages;
 internal sealed partial class EntityListPage : ListPage
 {
     private readonly HaSettings _settings;
-    private readonly HaApiClient _client;
+    private readonly IHaClient _client;
     private readonly HashSet<string>? _domains;
     private readonly HashSet<string>? _deviceClasses;
     private readonly bool _sortByNumericStateAscending;
 
     public EntityListPage(
         HaSettings settings,
-        HaApiClient client,
+        IHaClient client,
         string title,
         string id,
         IReadOnlyCollection<string>? domains = null,
