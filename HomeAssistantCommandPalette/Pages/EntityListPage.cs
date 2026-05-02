@@ -121,7 +121,7 @@ internal sealed partial class EntityListPage : ListPage
         // DomainBehavior; everything else still flows through the legacy
         // dispatch sites (BuildPrimaryCommand / BuildContextCommands /
         // BuildDetails / IconForEntity) until those branches move.
-        if (DomainRegistry.TryGet(entity.Domain, out var behavior))
+        if (DomainRegistry.TryGet(entity.Domain, entity.EntityId, out var behavior))
         {
             return CreateItemViaBehavior(entity, behavior);
         }
@@ -241,10 +241,6 @@ internal sealed partial class EntityListPage : ListPage
             Row("State", FormatStateWithUnit(entity)),
         };
 
-        if (entity.Domain == "sensor" || entity.Domain == "binary_sensor")
-        {
-            AddSensorRows(entity, meta);
-        }
 
         if (!string.IsNullOrEmpty(entity.AreaName))
         {
@@ -291,17 +287,6 @@ internal sealed partial class EntityListPage : ListPage
         return when.ToLocalTime().ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    private static void AddSensorRows(HaEntity entity, List<IDetailsElement> meta)
-    {
-        if (entity.Attributes.TryGetValue("device_class", out var dc) && dc is string dcs && !string.IsNullOrEmpty(dcs))
-        {
-            meta.Add(Row("Device class", dcs));
-        }
-        if (entity.Attributes.TryGetValue("state_class", out var sc) && sc is string scs && !string.IsNullOrEmpty(scs))
-        {
-            meta.Add(Row("State class", scs));
-        }
-    }
 
     private static string FormatNum(double v) =>
         v == System.Math.Floor(v)
@@ -333,15 +318,7 @@ internal sealed partial class EntityListPage : ListPage
     {
         var unavailable = string.Equals(entity.State, "unavailable", System.StringComparison.OrdinalIgnoreCase);
 
-        if (entity.EntityId == "sun.sun")
-        {
-            if (unavailable) return Icons.SunUnavailable;
-            return string.Equals(entity.State, "below_horizon", System.StringComparison.OrdinalIgnoreCase)
-                ? Icons.SunNight
-                : Icons.SunDay;
-        }
-
-        if (entity.Domain == "zone") return unavailable ? Icons.ZoneUnavailable : Icons.Zone;
+if (entity.Domain == "zone") return unavailable ? Icons.ZoneUnavailable : Icons.Zone;
 
         if (entity.Domain == "input_text") return Icons.InputText;
         if (entity.Domain == "input_datetime")
@@ -353,89 +330,6 @@ internal sealed partial class EntityListPage : ListPage
             if (hasDate && !hasTime) return Icons.InputDate;
             if (hasTime && !hasDate) return Icons.InputTime;
             return Icons.InputDateTime;
-        }
-
-        // sensor / binary_sensor — drive the icon off device_class. binary
-        // sensors carry on/off state; numeric sensors are stateless blue.
-        if (entity.Domain is "binary_sensor" or "sensor")
-        {
-            return IconForDeviceClass(entity, unavailable);
-        }
-
-        return unavailable ? Icons.ShapeUnavailable : Icons.Shape;
-    }
-
-    private static IconInfo IconForDeviceClass(HaEntity entity, bool unavailable)
-    {
-        var dc = entity.Attributes.TryGetValue("device_class", out var raw) && raw is string s ? s : null;
-
-        // binary_sensor — yellow when "detected/open/connected", blue when
-        // clear, grey when unavailable.
-        if (entity.Domain == "binary_sensor")
-        {
-            switch (dc)
-            {
-                case "door":
-                case "garage_door":
-                    if (unavailable) return Icons.DoorUnavailable;
-                    return entity.IsOn ? Icons.DoorOpen : Icons.DoorClosed;
-                case "window":
-                case "opening":
-                    if (unavailable) return Icons.WindowUnavailable;
-                    return entity.IsOn ? Icons.WindowOpen : Icons.WindowClosed;
-                case "motion":
-                case "occupancy":
-                case "presence":
-                case "moving":
-                    if (unavailable) return Icons.MotionUnavailable;
-                    return entity.IsOn ? Icons.MotionDetected : Icons.MotionClear;
-                case "connectivity":
-                    if (unavailable) return Icons.ConnectivityUnavailable;
-                    return entity.IsOn ? Icons.ConnectivityOn : Icons.ConnectivityOff;
-                case "plug":
-                case "power":
-                    if (unavailable) return Icons.PlugUnavailable;
-                    return entity.IsOn ? Icons.PlugOn : Icons.PlugOff;
-                case "update":
-                    if (unavailable) return Icons.UpdateUnavailable;
-                    return entity.IsOn ? Icons.UpdateOn : Icons.UpdateOff;
-            }
-        }
-
-        // sensor — always-blue icons keyed off device_class. Battery uses a
-        // dedicated icon set; the rest fall through to a generic shape when
-        // the device_class is missing or unrecognized.
-        switch (dc)
-        {
-            case "battery":
-                // Charge level drives both shape (10% buckets) and tint
-                // (red ≤ 20, yellow ≤ 30, blue otherwise). When the state
-                // doesn't parse as a number we keep the static fallback.
-                if (double.TryParse(entity.State,
-                        System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out var pct))
-                {
-                    return Icons.BatteryForLevel(pct, unavailable);
-                }
-                return unavailable ? Icons.BatteryUnavailable : Icons.Battery;
-            case "temperature":
-                return unavailable ? Icons.TemperatureUnavailable : Icons.Temperature;
-            case "humidity":
-            case "moisture":
-                return unavailable ? Icons.HumidityUnavailable : Icons.Humidity;
-            case "pressure":
-            case "atmospheric_pressure":
-                return unavailable ? Icons.PressureUnavailable : Icons.Pressure;
-            case "energy":
-            case "power":
-            case "current":
-            case "voltage":
-            case "apparent_power":
-                return unavailable ? Icons.EnergyUnavailable : Icons.Energy;
-            case "power_factor":
-                return unavailable ? Icons.PowerFactorUnavailable : Icons.PowerFactor;
-            case "carbon_dioxide":
-                return unavailable ? Icons.CarbonDioxideUnavailable : Icons.CarbonDioxide;
         }
 
         return unavailable ? Icons.ShapeUnavailable : Icons.Shape;

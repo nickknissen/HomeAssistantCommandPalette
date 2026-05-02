@@ -10,7 +10,7 @@ namespace HomeAssistantCommandPalette.Pages.Domains;
 /// <see cref="Default"/>, whose virtuals match the page's pre-refactor
 /// fallback (Open dashboard primary, no extra rows / context items).
 /// Entity-id overrides (e.g. <c>sun.sun</c>) take precedence over the
-/// domain map and land alongside the first override in a later PR.
+/// domain map.
 /// </summary>
 public static class DomainRegistry
 {
@@ -41,24 +41,43 @@ public static class DomainRegistry
             ["media_player"]  = new MediaPlayerBehavior(),
             ["camera"]        = new CameraBehavior(),
             ["weather"]       = new WeatherBehavior(),
+            ["sensor"]        = new SensorBehavior(),
+            ["binary_sensor"] = new BinarySensorBehavior(),
         };
 
     /// <summary>
-    /// Returns the registered behavior for <paramref name="domain"/>, or
-    /// <see cref="Default"/> when no entry exists.
+    /// Entity-id specific overrides. Wins over the domain map. Used for
+    /// well-known singletons whose icon / behavior diverges from their
+    /// domain's defaults — currently just <c>sun.sun</c>.
     /// </summary>
-    public static DomainBehavior For(string domain)
-        => Map.TryGetValue(domain, out var b) ? b : Default;
+    private static readonly Dictionary<string, DomainBehavior> EntityIdMap =
+        new(StringComparer.Ordinal)
+        {
+            ["sun.sun"] = new SunBehavior(),
+        };
 
     /// <summary>
-    /// Tries to get a registered (non-default) behavior. Used by the page
-    /// during incremental migration: only domains present in the map go
-    /// through <see cref="DomainBehavior"/>; everything else still flows
-    /// through the legacy dispatch sites until those branches are
-    /// migrated.
+    /// Returns the registered behavior for <paramref name="entityId"/>
+    /// or <paramref name="domain"/>, or <see cref="Default"/> when no
+    /// entry exists. Entity-id matches take precedence.
     /// </summary>
-    public static bool TryGet(string domain, [NotNullWhen(true)] out DomainBehavior? behavior)
-        => Map.TryGetValue(domain, out behavior);
+    public static DomainBehavior For(string domain, string entityId)
+    {
+        if (EntityIdMap.TryGetValue(entityId, out var b)) return b;
+        return Map.TryGetValue(domain, out b) ? b : Default;
+    }
+
+    /// <summary>
+    /// Tries to resolve a registered (non-default) behavior for the
+    /// given entity. Used by the page to route through
+    /// <see cref="DomainBehavior"/> only for migrated domains; misses
+    /// flow through the legacy dispatch sites.
+    /// </summary>
+    public static bool TryGet(string domain, string entityId, [NotNullWhen(true)] out DomainBehavior? behavior)
+    {
+        if (EntityIdMap.TryGetValue(entityId, out behavior)) return true;
+        return Map.TryGetValue(domain, out behavior);
+    }
 
     private sealed class DefaultBehavior : DomainBehavior
     {
