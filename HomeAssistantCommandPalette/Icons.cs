@@ -142,6 +142,25 @@ internal static class Icons
     public static IconInfo WeatherUnavailable => IconHelpers.FromRelativePath("Assets\\Icons\\weather-unavailable.svg");
 
     /// <summary>
+    /// Generic state-tinted icon dispatch. Used by the
+    /// <see cref="HomeAssistantCommandPalette.Pages.Domains.DomainBehavior"/>
+    /// default — concrete behaviors override <c>BuildIcon</c> when they
+    /// need richer rules (sub-state palettes, device_class dispatch,
+    /// supported_features gating, …). Domains land here as their PRs
+    /// migrate them off the legacy <c>IconForEntity</c> dispatcher.
+    /// </summary>
+    public static IconInfo ForDomain(string domain, string state)
+    {
+        var unavailable = string.Equals(state, "unavailable", System.StringComparison.OrdinalIgnoreCase);
+        var on = string.Equals(state, "on", System.StringComparison.OrdinalIgnoreCase);
+        return domain switch
+        {
+            "switch" => unavailable ? SwitchUnavailable : on ? SwitchOn : SwitchOff,
+            _ => unavailable ? ShapeUnavailable : Shape,
+        };
+    }
+
+    /// <summary>
     /// Returns the icon for an HA weather condition string. Mirrors the
     /// MDI weather glyph set the Home Assistant frontend uses
     /// (weather-sunny / weather-cloudy / weather-rainy / …). Unknown

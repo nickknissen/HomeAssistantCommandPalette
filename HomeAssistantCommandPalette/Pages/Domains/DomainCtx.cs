@@ -15,7 +15,7 @@ namespace HomeAssistantCommandPalette.Pages.Domains;
 /// into <see cref="Commands.CallServiceCommand"/>, never invoke it
 /// directly. The page calls <c>RaiseItemsChanged</c> from there.
 /// </remarks>
-internal readonly record struct DomainCtx(
+public readonly record struct DomainCtx(
     HaEntity Entity,
     IHaClient Client,
     HaSettings Settings,
