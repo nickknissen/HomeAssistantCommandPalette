@@ -245,10 +245,6 @@ internal sealed partial class EntityListPage : ListPage
         {
             AddMediaPlayerRows(entity, meta);
         }
-        else if (entity.Domain == "climate")
-        {
-            AddClimateRows(entity, meta);
-        }
         else if (entity.Domain == "weather")
         {
             AddWeatherRows(entity, meta);
@@ -450,63 +446,6 @@ internal sealed partial class EntityListPage : ListPage
             : $"{minutes}:{seconds:D2}";
     }
 
-    private static void AddClimateRows(HaEntity entity, List<IDetailsElement> meta)
-    {
-        if (entity.Attributes.TryGetValue("current_temperature", out var ct))
-        {
-            var v = ct switch { double d => $"{d}°", long l => $"{l}°", _ => null };
-            if (v is not null) meta.Add(Row("Current temp", v));
-        }
-        if (entity.Attributes.TryGetValue("temperature", out var tt))
-        {
-            var v = tt switch { double d => $"{d}°", long l => $"{l}°", _ => null };
-            if (v is not null) meta.Add(Row("Target temp", v));
-        }
-        // Dual setpoint (heat_cool / auto): the integration reports
-        // target_temp_low / target_temp_high instead of `temperature`.
-        if (entity.Attributes.TryGetValue("target_temp_low", out var tlo))
-        {
-            var v = tlo switch { double d => $"{d}°", long l => $"{l}°", _ => null };
-            if (v is not null) meta.Add(Row("Target low", v));
-        }
-        if (entity.Attributes.TryGetValue("target_temp_high", out var thi))
-        {
-            var v = thi switch { double d => $"{d}°", long l => $"{l}°", _ => null };
-            if (v is not null) meta.Add(Row("Target high", v));
-        }
-        // Min / max range — only if both are reported.
-        var min = entity.Attributes.TryGetValue("min_temp", out var mn) ? mn : null;
-        var max = entity.Attributes.TryGetValue("max_temp", out var mx) ? mx : null;
-        static string? FormatTemp(object? o) => o switch { double d => $"{d}°", long l => $"{l}°", _ => null };
-        var minStr = FormatTemp(min);
-        var maxStr = FormatTemp(max);
-        if (minStr is not null && maxStr is not null)
-        {
-            meta.Add(Row("Range", $"{minStr} – {maxStr}"));
-        }
-        if (entity.Attributes.TryGetValue("current_humidity", out var ch))
-        {
-            var v = ch switch { double d => $"{(int)d}%", long l => $"{l}%", _ => null };
-            if (v is not null) meta.Add(Row("Humidity", v));
-        }
-        if (entity.Attributes.TryGetValue("hvac_action", out var ha) && ha is string has && !string.IsNullOrEmpty(has))
-        {
-            meta.Add(Row("Action", has));
-        }
-        if (entity.Attributes.TryGetValue("fan_mode", out var fm) && fm is string fms && !string.IsNullOrEmpty(fms))
-        {
-            meta.Add(Row("Fan", fms));
-        }
-        if (entity.Attributes.TryGetValue("swing_mode", out var swm) && swm is string swms && !string.IsNullOrEmpty(swms))
-        {
-            meta.Add(Row("Swing", swms));
-        }
-        if (entity.Attributes.TryGetValue("preset_mode", out var pm) && pm is string pms && !string.IsNullOrEmpty(pms))
-        {
-            meta.Add(Row("Preset", pms));
-        }
-    }
-
     private static void AddMediaPlayerRows(HaEntity entity, List<IDetailsElement> meta)
     {
         if (entity.Attributes.TryGetValue("media_title", out var title) && title is string ts && !string.IsNullOrEmpty(ts))
@@ -594,18 +533,7 @@ internal sealed partial class EntityListPage : ListPage
                 : Icons.MediaPlayerIdle;
         }
 
-        if (entity.Domain == "climate")
-        {
-            if (unavailable) return Icons.ClimateUnavailable;
-            return entity.State.ToLowerInvariant() switch
-            {
-                "off" => Icons.ClimateOff,
-                "auto" or "heat_cool" => Icons.ClimateAuto,
-                _ => Icons.ClimateActive, // heat / cool / dry / fan_only
-            };
-        }
-
-        if (entity.EntityId == "sun.sun")
+if (entity.EntityId == "sun.sun")
         {
             if (unavailable) return Icons.SunUnavailable;
             return string.Equals(entity.State, "below_horizon", System.StringComparison.OrdinalIgnoreCase)
@@ -738,69 +666,6 @@ internal sealed partial class EntityListPage : ListPage
             // volume_level wants 0.0..1.0 — convert from percentage.
             extraData: new Dictionary<string, object?> { ["volume_level"] = pct / 100.0 },
             onSuccess: OnServiceCallSucceeded));
-
-    private CommandContextItem TemperaturePreset(HaEntity entity, double temp) =>
-        new(new CallServiceCommand(
-            _client,
-            domain: "climate",
-            service: "set_temperature",
-            entityId: entity.EntityId,
-            displayName: $"{temp}°",
-            icon: Icons.Thermometer,
-            extraData: new Dictionary<string, object?> { ["temperature"] = temp },
-            onSuccess: OnServiceCallSucceeded));
-
-    private CommandContextItem ClimateModeItem(HaEntity entity, string mode) =>
-        new(new CallServiceCommand(
-            _client,
-            domain: "climate",
-            service: "set_hvac_mode",
-            entityId: entity.EntityId,
-            displayName: mode,
-            extraData: new Dictionary<string, object?> { ["hvac_mode"] = mode },
-            onSuccess: OnServiceCallSucceeded));
-
-    private CommandContextItem FanModeItem(HaEntity entity, string mode) =>
-        new(new CallServiceCommand(
-            _client,
-            domain: "climate",
-            service: "set_fan_mode",
-            entityId: entity.EntityId,
-            displayName: mode,
-            extraData: new Dictionary<string, object?> { ["fan_mode"] = mode },
-            onSuccess: OnServiceCallSucceeded));
-
-    private CommandContextItem SwingModeItem(HaEntity entity, string mode) =>
-        new(new CallServiceCommand(
-            _client,
-            domain: "climate",
-            service: "set_swing_mode",
-            entityId: entity.EntityId,
-            displayName: mode,
-            extraData: new Dictionary<string, object?> { ["swing_mode"] = mode },
-            onSuccess: OnServiceCallSucceeded));
-
-    private static double GetCurrentTargetTemp(HaEntity entity)
-    {
-        if (!entity.Attributes.TryGetValue("temperature", out var t)) return double.NaN;
-        return t switch
-        {
-            double d => d,
-            long l => l,
-            _ => double.NaN,
-        };
-    }
-
-    private static double GetTempStep(HaEntity entity)
-    {
-        if (!entity.Attributes.TryGetValue("target_temp_step", out var s)) return 0.5;
-        return s switch
-        {
-            double d => d,
-            long l => l,
-            _ => 0.5,
-        };
-    }
 
     private IContextItem[] BuildContextCommands(HaEntity entity, ICommand primary)
     {
@@ -948,100 +813,6 @@ internal sealed partial class EntityListPage : ListPage
                         Title = "Select sound mode…",
                         Icon = Icons.Volume,
                         MoreCommands = soundItems,
-                    });
-                }
-            }
-        }
-
-        if (entity.Domain == "climate")
-        {
-            // Target temperature ± buttons (clamped to min/max if HA reports them).
-            var current = GetCurrentTargetTemp(entity);
-            var step = GetTempStep(entity);
-            if (!double.IsNaN(current))
-            {
-                var increased = System.Math.Round(current + step, 1);
-                var decreased = System.Math.Round(current - step, 1);
-                items.Add(new CommandContextItem(
-                    new CallServiceCommand(_client, "climate", "set_temperature", entity.EntityId,
-                        $"Increase to {increased}°", icon: Icons.Thermometer,
-                        extraData: new Dictionary<string, object?> { ["temperature"] = increased },
-                        onSuccess: OnServiceCallSucceeded)));
-                items.Add(new CommandContextItem(
-                    new CallServiceCommand(_client, "climate", "set_temperature", entity.EntityId,
-                        $"Decrease to {decreased}°", icon: Icons.Thermometer,
-                        extraData: new Dictionary<string, object?> { ["temperature"] = decreased },
-                        onSuccess: OnServiceCallSucceeded)));
-            }
-
-            // Common temperature presets — handy when the climate isn't
-            // currently running (no current target to ±-step from).
-            var tempPresets = new IContextItem[]
-            {
-                TemperaturePreset(entity, 18),
-                TemperaturePreset(entity, 20),
-                TemperaturePreset(entity, 21),
-                TemperaturePreset(entity, 22),
-                TemperaturePreset(entity, 24),
-            };
-            items.Add(new CommandContextItem(new NoOpCommand())
-            {
-                Title = "Set temperature…",
-                Icon = Icons.Thermometer,
-                MoreCommands = tempPresets,
-            });
-
-            // HVAC mode submenu — surface every supported mode reported by
-            // the entity (off/heat/cool/heat_cool/auto/dry/fan_only).
-            if (entity.Attributes.TryGetValue("hvac_modes", out var hvm) && hvm is List<object?> modes)
-            {
-                var modeItems = modes
-                    .OfType<string>()
-                    .Select(m => (IContextItem)ClimateModeItem(entity, m))
-                    .ToArray();
-                if (modeItems.Length > 0)
-                {
-                    items.Add(new CommandContextItem(new NoOpCommand())
-                    {
-                        Title = "Set HVAC mode…",
-                        Icon = Icons.Thermostat,
-                        MoreCommands = modeItems,
-                    });
-                }
-            }
-
-            // Fan mode submenu — same pattern, using fan_modes attribute.
-            if (entity.Attributes.TryGetValue("fan_modes", out var fm) && fm is List<object?> fanModes)
-            {
-                var modeItems = fanModes
-                    .OfType<string>()
-                    .Select(m => (IContextItem)FanModeItem(entity, m))
-                    .ToArray();
-                if (modeItems.Length > 0)
-                {
-                    items.Add(new CommandContextItem(new NoOpCommand())
-                    {
-                        Title = "Set fan mode…",
-                        Icon = Icons.Fan,
-                        MoreCommands = modeItems,
-                    });
-                }
-            }
-
-            // Swing mode submenu — same pattern, using swing_modes attribute.
-            if (entity.Attributes.TryGetValue("swing_modes", out var sw) && sw is List<object?> swingModes)
-            {
-                var modeItems = swingModes
-                    .OfType<string>()
-                    .Select(m => (IContextItem)SwingModeItem(entity, m))
-                    .ToArray();
-                if (modeItems.Length > 0)
-                {
-                    items.Add(new CommandContextItem(new NoOpCommand())
-                    {
-                        Title = "Set swing mode…",
-                        Icon = Icons.Fan,
-                        MoreCommands = modeItems,
                     });
                 }
             }
