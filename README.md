@@ -6,24 +6,6 @@ Home Assistant entities from CmdPal.
 > Inspired by the [Raycast Home Assistant extension](https://github.com/raycast/extensions/tree/main/extensions/homeassistant)
 > by tonka3000.
 
-## Status
-
-**Phase 1 — minimum viable.** See [GitHub Issues](https://github.com/nickknissen/HomeAssistantCommandPalette/issues) for the active roadmap.
-
-## Phase 1 features
-
-- Settings: Home Assistant URL + Long-Lived Access Token (+ ignore-cert toggle)
-- One top-level command per domain, modeled on the Raycast extension:
-  All Entities, Lights, Switches, Covers, Fans, Media Players, Scenes,
-  Scripts, Automations, Sensors, Binary Sensors, Climate, Buttons, Persons,
-  Zones, Cameras, Vacuums, Helpers, Updates, Weather, plus an
-  **Open Dashboard** quick action
-- Each domain page lists matching entities from `GET /api/states`,
-  searchable via CmdPal
-- Default action toggles / activates / runs the entity (per-domain)
-- Context menu: Turn on, Turn off, Open in dashboard, Copy entity ID
-- Demo mode (`DEMO_MODE` define) for Microsoft Store screenshots
-
 ## Setup
 
 1. In Home Assistant, go to **Profile → Security → Long-Lived Access Tokens**
