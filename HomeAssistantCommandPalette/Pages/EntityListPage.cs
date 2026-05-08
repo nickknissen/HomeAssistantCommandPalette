@@ -24,6 +24,10 @@ namespace HomeAssistantCommandPalette.Pages;
 /// successful service call, the person-avatar wrap, and the page-level
 /// subtitle / tags.
 /// </remarks>
+// Pages live for the extension's lifetime (held in the provider's _commands
+// array) and CmdPal's ListPage has no disposal hook, so the Timer field
+// never needs releasing — it dies with the process.
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1001:Types that own disposable fields should be disposable", Justification = "Page lifetime equals process lifetime; ListPage has no Dispose hook.")]
 internal sealed partial class EntityListPage : ListPage
 {
     private readonly HaSettings _settings;
@@ -32,6 +36,12 @@ internal sealed partial class EntityListPage : ListPage
     private readonly HashSet<string>? _domains;
     private readonly HashSet<string>? _deviceClasses;
     private readonly bool _sortByNumericStateAscending;
+
+    // HA can burst many state_changed events in a short window (e.g. an
+    // automation toggling 20 lights). Coalesce into one RaiseItemsChanged
+    // call per quiet window so we don't thrash CmdPal's render path.
+    private static readonly TimeSpan WsRefreshDebounce = TimeSpan.FromMilliseconds(250);
+    private readonly System.Threading.Timer _wsRefreshTimer;
 
     public EntityListPage(
         HaSettings settings,
@@ -57,6 +67,44 @@ internal sealed partial class EntityListPage : ListPage
         Id = id;
         ShowDetails = true;
         PlaceholderText = $"Search {title.ToLowerInvariant()}";
+
+        _wsRefreshTimer = new System.Threading.Timer(_ =>
+        {
+            try { RaiseItemsChanged(0); } catch { /* page may be torn down */ }
+        }, state: null, dueTime: System.Threading.Timeout.Infinite, period: System.Threading.Timeout.Infinite);
+
+        // Pages live for the extension's lifetime (held in the provider's
+        // _commands array), so we never unsubscribe — the handler dies
+        // with the process.
+        _client.StateChanged += OnClientStateChanged;
+    }
+
+    private void OnClientStateChanged(string? entityId)
+    {
+        // Filter at the page level — without this, an unrelated sensor
+        // pushing updates would re-render the Lights page (and reset the
+        // user's selection to position 1) every few seconds. Null
+        // entityId = full reset (hydration / reconnect); always refresh.
+        if (entityId is not null && !MatchesPageFilter(entityId))
+        {
+            return;
+        }
+        _wsRefreshTimer.Change(WsRefreshDebounce, System.Threading.Timeout.InfiniteTimeSpan);
+    }
+
+    private bool MatchesPageFilter(string entityId)
+    {
+        // No domain filter (All Entities) — every event is a candidate.
+        if (_domains is null) return true;
+
+        var dot = entityId.IndexOf('.', StringComparison.Ordinal);
+        if (dot <= 0) return false;
+        var domain = entityId.AsSpan(0, dot).ToString();
+        // Device-class is a finer cut (Batteries, Doors, ...) — checking
+        // it would need an attribute lookup against the snapshot. Domain
+        // alone already filters out 95% of unrelated traffic; accept the
+        // few false-positive refreshes as the price of simplicity.
+        return _domains.Contains(domain);
     }
 
     public override IListItem[] GetItems()
@@ -122,8 +170,15 @@ internal sealed partial class EntityListPage : ListPage
 
     private void OnServiceCallSucceeded()
     {
-        // Fire-and-forget: invalidate cache + tell CmdPal to re-call GetItems
-        // after HA has had a moment to propagate the new state.
+        // When WS push is live, the state_changed event will refresh the
+        // list naturally — adding a second timed RaiseItemsChanged here
+        // causes visible flicker (two re-renders within ~500 ms of one
+        // user action).
+        if (_client.IsLive) return;
+
+        // REST-only path (cold start, or WS unreachable): we own the
+        // refresh ourselves. Fire-and-forget: tell CmdPal to re-call
+        // GetItems after HA has had a moment to propagate the new state.
         System.Threading.Tasks.Task.Run(async () =>
         {
             await System.Threading.Tasks.Task.Delay(RefreshDelay).ConfigureAwait(false);

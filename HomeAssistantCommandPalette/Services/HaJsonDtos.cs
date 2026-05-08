@@ -137,6 +137,7 @@ internal sealed class HaConfigDto
     [JsonPropertyName("state")] public string? State { get; init; }
 }
 
+[JsonSerializable(typeof(HaStateDto))]
 [JsonSerializable(typeof(List<HaStateDto>))]
 [JsonSerializable(typeof(List<HaCalendarDto>))]
 [JsonSerializable(typeof(List<HaCalendarEventDto>))]

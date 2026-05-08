@@ -55,4 +55,22 @@ public interface IHaClient : IDisposable
     /// the most recent attempt succeeded.
     /// </summary>
     string LastAreaError { get; }
+
+    /// <summary>
+    /// Raised when the underlying state snapshot mutates. Argument is the
+    /// entity_id that changed, or <c>null</c> for a full reset (initial
+    /// hydration, reconnect). Page consumers filter by their domain set
+    /// before kicking <c>RaiseItemsChanged</c>; without filtering, every
+    /// background state_changed would re-render every open page and reset
+    /// the user's selection. The REST-only fallback path never fires.
+    /// </summary>
+    event Action<string?> StateChanged;
+
+    /// <summary>
+    /// True when state is being pushed live (WS hydrated). Pages use this
+    /// to skip the post-service-call REST refresh — when WS is live, the
+    /// state_changed event does the same job and double-refreshing causes
+    /// visible flicker.
+    /// </summary>
+    bool IsLive { get; }
 }

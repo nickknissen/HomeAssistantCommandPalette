@@ -27,6 +27,8 @@ public class CameraBehaviorTests
         public HaConfigProbe ProbeConfig() => throw new NotSupportedException();
         public int LastAreaCount => -1;
         public string LastAreaError => string.Empty;
+        public event Action<string?> StateChanged { add { } remove { } }
+        public bool IsLive => false;
         public void Dispose() { }
     }
 

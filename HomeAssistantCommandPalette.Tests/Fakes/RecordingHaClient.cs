@@ -49,6 +49,10 @@ internal sealed class RecordingHaClient : IHaClient
 
     public string LastAreaError => string.Empty;
 
+    public event Action<string?> StateChanged { add { } remove { } }
+
+    public bool IsLive => false;
+
     public void Dispose() { }
 
     public sealed record CallRecord(

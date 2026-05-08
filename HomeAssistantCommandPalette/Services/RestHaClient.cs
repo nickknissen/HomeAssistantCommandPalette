@@ -87,9 +87,24 @@ public sealed partial class RestHaClient : IHaClient
     /// </summary>
     public string LastAreaError { get; private set; } = string.Empty;
 
+    private readonly HaWsClient _ws;
+
+    /// <inheritdoc />
+    public event Action<string?>? StateChanged;
+
+    public bool IsLive => _ws.IsHydrated;
+
     public RestHaClient(HaSettings settings)
     {
         _settings = settings;
+        _ws = new HaWsClient(settings);
+        _ws.StateChanged += entityId => StateChanged?.Invoke(entityId);
+    }
+
+    event Action<string?> IHaClient.StateChanged
+    {
+        add => StateChanged += value;
+        remove => StateChanged -= value;
     }
 
     public HaQueryResult GetStates()
@@ -104,6 +119,20 @@ public sealed partial class RestHaClient : IHaClient
             };
         }
 
+        // Kick the WS pump on first call (lazy start). EnsureStarted is a
+        // no-op if the connection is already healthy for these settings,
+        // and triggers a restart if URL/token changed.
+        _ws.EnsureStarted();
+
+        // WS path: read straight from the in-memory snapshot once it's
+        // populated, stitching in areas from the existing REST area map.
+        // Slice 2 will move area resolution onto WS too and drop the
+        // template round-trip.
+        if (_ws.IsHydrated)
+        {
+            return BuildResultFromWsSnapshot();
+        }
+
         if (_cache.TryGetValue(StatesCacheKey, out HaQueryResult? cached) && cached is { HasError: false })
         {
             return cached;
@@ -116,6 +145,38 @@ public sealed partial class RestHaClient : IHaClient
             _cache.Set(StatesCacheKey, result, CacheTtl);
         }
         return result;
+    }
+
+    private HaQueryResult BuildResultFromWsSnapshot()
+    {
+        var areas = LoadAreaMapBestEffort();
+        var snapshot = _ws.Entities;
+
+        var list = new List<HaEntity>(snapshot.Count);
+        foreach (var entity in snapshot.Values)
+        {
+            // Stitch areas in lazily — the WS store doesn't carry area
+            // info today (state_changed events don't include it). Falls
+            // back to whatever AreaName the entity already has.
+            if (areas is { Count: > 0 } && areas.TryGetValue(entity.EntityId, out var area))
+            {
+                list.Add(new HaEntity
+                {
+                    EntityId = entity.EntityId,
+                    State = entity.State,
+                    Attributes = entity.Attributes,
+                    LastChanged = entity.LastChanged,
+                    LastUpdated = entity.LastUpdated,
+                    AreaName = area,
+                });
+            }
+            else
+            {
+                list.Add(entity);
+            }
+        }
+        list.Sort(HaEntityMapper.CompareByFriendlyName);
+        return new HaQueryResult { Items = list };
     }
 
     public bool TryCallService(string domain, string service, string entityId, out string errorMessage)
@@ -831,51 +892,11 @@ public sealed partial class RestHaClient : IHaClient
         foreach (var dto in dtos)
         {
             if (string.IsNullOrEmpty(dto.EntityId)) continue;
-
-            var attrs = new Dictionary<string, object?>(StringComparer.Ordinal);
-            if (dto.Attributes is not null)
-            {
-                foreach (var (key, value) in dto.Attributes)
-                {
-                    attrs[key] = ToObject(value);
-                }
-            }
-
-            list.Add(new HaEntity
-            {
-                EntityId = dto.EntityId,
-                State = dto.State ?? string.Empty,
-                Attributes = attrs,
-                LastChanged = dto.LastChanged,
-                LastUpdated = dto.LastUpdated,
-            });
+            list.Add(HaEntityMapper.FromDto(dto));
         }
 
-        list.Sort((a, b) => string.Compare(a.FriendlyName, b.FriendlyName, StringComparison.OrdinalIgnoreCase));
+        list.Sort(HaEntityMapper.CompareByFriendlyName);
         return list;
-    }
-
-    private static object? ToObject(JsonElement el) => el.ValueKind switch
-    {
-        JsonValueKind.String => el.GetString(),
-        JsonValueKind.Number => el.TryGetInt64(out var l) ? l : el.GetDouble(),
-        JsonValueKind.True => true,
-        JsonValueKind.False => false,
-        JsonValueKind.Null => null,
-        JsonValueKind.Array => ParseJsonArray(el),
-        _ => el.GetRawText(),
-    };
-
-    // Recursive — preserves typed values inside arrays (esp. string[]
-    // for things like hvac_modes / fan_modes).
-    private static List<object?> ParseJsonArray(JsonElement el)
-    {
-        var items = new List<object?>(el.GetArrayLength());
-        foreach (var item in el.EnumerateArray())
-        {
-            items.Add(ToObject(item));
-        }
-        return items;
     }
 
     private HttpClient GetClient()
@@ -922,6 +943,7 @@ public sealed partial class RestHaClient : IHaClient
 
     public void Dispose()
     {
+        _ws.Dispose();
         lock (_gate)
         {
             _client?.Dispose();

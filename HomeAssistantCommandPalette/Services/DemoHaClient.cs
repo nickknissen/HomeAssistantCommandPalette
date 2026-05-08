@@ -16,6 +16,13 @@ internal sealed partial class DemoHaClient : IHaClient
     public int LastAreaCount => 0;
     public string LastAreaError => string.Empty;
 
+    // Demo data is static — nothing pushes updates, so no subscriber will
+    // ever fire. Declared as add/remove so the compiler doesn't warn about
+    // an event field that's never assigned.
+    public event Action<string?> StateChanged { add { } remove { } }
+
+    public bool IsLive => false;
+
     public HaQueryResult GetStates() => DemoHaData.Result();
 
     public bool TryCallService(string domain, string service, string entityId, out string error)
