@@ -184,6 +184,8 @@ APIs.
 - [x] **Show Entity IDs setting** — toggle that swaps the friendly-name
       subtitle for the raw `entity_id` (mirrors Raycast's `showEntityId`).
       Useful for power users wiring up automations.
+- [x] **Hide unavailable entities setting** — toggle that filters out
+      entities with state `unavailable` from all list pages.
 - [ ] **Multi-instance support** — one default instance plus alternates,
       switchable via a top-level command. Add an "Instances" array in
       `JsonSettingsManager`.

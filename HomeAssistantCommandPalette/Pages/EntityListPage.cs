@@ -89,6 +89,10 @@ internal sealed partial class EntityListPage : ListPage
         }
 
         IEnumerable<HaEntity> items = result.Items;
+        if (_settings.HideUnavailable)
+        {
+            items = items.Where(e => !string.Equals(e.State, "unavailable", StringComparison.OrdinalIgnoreCase));
+        }
         if (_domains is not null)
         {
             items = items.Where(e => _domains.Contains(e.Domain));

@@ -55,6 +55,12 @@ public sealed class HaSettings : JsonSettingsManager
         "Replace the area name in the list subtitle with the raw entity_id (e.g. light.kitchen). Useful when wiring up automations.",
         false);
 
+    private readonly ToggleSetting _hideUnavailableSetting = new(
+        "ha-hide-unavailable",
+        "Hide unavailable entities",
+        "Filter out entities whose state is 'unavailable' from all list pages.",
+        false);
+
     public HaSettings()
     {
         FilePath = SettingsJsonPath();
@@ -64,6 +70,7 @@ public sealed class HaSettings : JsonSettingsManager
         Settings.Add(_ignoreCertSetting);
         Settings.Add(_dashboardPathSetting);
         Settings.Add(_showEntityIdSetting);
+        Settings.Add(_hideUnavailableSetting);
 
         LoadSettings();
 
@@ -90,6 +97,8 @@ public sealed class HaSettings : JsonSettingsManager
     }
 
     public bool ShowEntityId => _showEntityIdSetting.Value;
+
+    public bool HideUnavailable => _hideUnavailableSetting.Value;
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Url) && !string.IsNullOrWhiteSpace(Token);
 
