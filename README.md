@@ -8,7 +8,7 @@ Home Assistant entities from CmdPal.
 
 ## Status
 
-**Phase 1 — minimum viable.** See [`docs/todo.md`](docs/todo.md) for the roadmap.
+**Phase 1 — minimum viable.** See [GitHub Issues](https://github.com/nickknissen/HomeAssistantCommandPalette/issues) for the active roadmap.
 
 ## Phase 1 features
 
@@ -90,8 +90,10 @@ there to expose another domain.
 
 ## Roadmap
 
-See [`docs/todo.md`](docs/todo.md) for Phase 2 (per-domain pages) and Phase 3
-(WebSocket live state, Assist, calendar/weather, etc.).
+Open work is tracked in [GitHub Issues](https://github.com/nickknissen/HomeAssistantCommandPalette/issues).
+Phase 1 (minimum viable) and most of Phase 2 (per-domain actions) are shipped;
+remaining items cover Phase 3 (notifications, weather forecast, history charts,
+multi-instance, etc.) and pre-publish polish.
 
 ## License
 
