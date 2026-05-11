@@ -47,10 +47,11 @@ public sealed partial class RestHaClient : IHaClient
     // avoids getting stuck when HA's area registry is briefly unavailable
     // during startup, then resumes the long TTL once areas resolve.
     private static readonly TimeSpan AreaEmptyRetryTtl = TimeSpan.FromMinutes(1);
-    // Match Raycast's default camera refresh cadence — short enough that
-    // re-opening the page shows recent video, long enough to dedupe back-
-    // to-back GetItems calls on the same page render.
-    private static readonly TimeSpan CameraSnapshotTtl = TimeSpan.FromSeconds(5);
+    // Match Raycast's default camera refresh cadence. Keep this in sync
+    // with EntityListPage's camera auto-refresh timer so each tick can
+    // fetch a fresh snapshot while still deduping back-to-back GetItems
+    // calls on the same page render.
+    private static readonly TimeSpan CameraSnapshotTtl = TimeSpan.FromSeconds(3);
     // Avatars / entity pictures change rarely. A long TTL keeps repeat
     // page renders cheap; if the picture is updated in HA it'll surface on
     // the next CmdPal restart.
