@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using HomeAssistantCommandPalette.Commands;
+using HomeAssistantCommandPalette.Pages.Forms;
 using Microsoft.CommandPalette.Extensions;
 using Microsoft.CommandPalette.Extensions.Toolkit;
 
@@ -11,6 +12,13 @@ namespace HomeAssistantCommandPalette.Pages.Domains.Behaviors;
 public sealed class InputSelectBehavior : DomainBehavior
 {
     public override string Domain => "input_select";
+
+    public override ICommand BuildPrimary(in DomainCtx ctx)
+        => new HelperFormPage(
+            ctx.Entity,
+            new InputSelectFormContent(ctx.Entity, ctx.Client, ctx.OnSuccess),
+            $"Set {ctx.Entity.FriendlyName}",
+            Icons.InputSelect);
 
     public override void AddContextItems(in DomainCtx ctx, List<IContextItem> items)
     {

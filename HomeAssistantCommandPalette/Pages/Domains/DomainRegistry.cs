@@ -33,6 +33,7 @@ public static class DomainRegistry
             ["update"]        = new UpdateBehavior(),
             ["person"]        = new PersonBehavior(),
             ["input_select"]  = new InputSelectBehavior(),
+            ["input_text"]    = new InputTextBehavior(),
             ["input_number"]  = new InputNumberBehavior(),
             ["cover"]         = new CoverBehavior(),
             ["fan"]           = new FanBehavior(),
