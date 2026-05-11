@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using HomeAssistantCommandPalette.Commands;
@@ -30,6 +31,8 @@ namespace HomeAssistantCommandPalette.Pages;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1001:Types that own disposable fields should be disposable", Justification = "Page lifetime equals process lifetime; ListPage has no Dispose hook.")]
 internal sealed partial class EntityListPage : ListPage
 {
+    private const string EntityCommandIdPrefix = "ha.entity:";
+
     private readonly HaSettings _settings;
     private readonly IHaClient _client;
     private readonly IEntityIconResolver _iconResolver;
@@ -37,6 +40,7 @@ internal sealed partial class EntityListPage : ListPage
     private readonly HashSet<string>? _deviceClasses;
     private readonly bool _sortByNumericStateAscending;
     private readonly bool _openAttributesPage;
+    private readonly ConcurrentDictionary<string, ListItem> _pinnedItems = new(StringComparer.Ordinal);
 
     // HA can burst many state_changed events in a short window (e.g. an
     // automation toggling 20 lights). Coalesce into one RaiseItemsChanged
@@ -99,6 +103,8 @@ internal sealed partial class EntityListPage : ListPage
 
     private void OnClientStateChanged(string? entityId)
     {
+        RefreshPinnedItems(entityId);
+
         // Filter at the page level — without this, an unrelated sensor
         // pushing updates would re-render the Lights page (and reset the
         // user's selection to position 1) every few seconds. Null
@@ -183,6 +189,44 @@ internal sealed partial class EntityListPage : ListPage
         return items.Select(CreateItem).ToArray();
     }
 
+    internal ListItem? TryCreateItemForCommandId(string id)
+    {
+        if (!TryGetEntityIdFromCommandId(id, out var entityId))
+        {
+            return null;
+        }
+
+        var result = _client.GetStates();
+        if (result.HasError)
+        {
+            return null;
+        }
+
+        var entity = result.Items.FirstOrDefault(e => string.Equals(e.EntityId, entityId, StringComparison.Ordinal));
+        if (entity is null)
+        {
+            return null;
+        }
+
+        var item = CreateItem(entity);
+        _pinnedItems[entityId] = item;
+        return item;
+    }
+
+    internal static string EntityCommandId(string entityId) => EntityCommandIdPrefix + entityId;
+
+    internal static bool TryGetEntityIdFromCommandId(string id, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? entityId)
+    {
+        if (id.StartsWith(EntityCommandIdPrefix, StringComparison.Ordinal) && id.Length > EntityCommandIdPrefix.Length)
+        {
+            entityId = id[EntityCommandIdPrefix.Length..];
+            return true;
+        }
+
+        entityId = null;
+        return false;
+    }
+
     // HA dispatches services asynchronously — even after a 200 response,
     // the entity state we'd refetch may still be stale for a few hundred ms.
     // Wait briefly before signalling the list to refresh.
@@ -245,6 +289,7 @@ internal sealed partial class EntityListPage : ListPage
         var primary = _openAttributesPage
             ? new EntityAttributesPage(entity)
             : behavior.BuildPrimary(in ctx);
+        SetCommandId(primary, EntityCommandId(entity.EntityId));
 
         var rows = new List<IDetailsElement> { DomainHelpers.Row("State", DomainHelpers.FormatStateWithUnit(entity)) };
         behavior.AddDetailRows(in ctx, rows);
@@ -283,6 +328,71 @@ internal sealed partial class EntityListPage : ListPage
             MoreCommands = ctxItems.ToArray(),
             Details = details,
         };
+    }
+
+    private void RefreshPinnedItems(string? changedEntityId)
+    {
+        if (_pinnedItems.IsEmpty)
+        {
+            return;
+        }
+
+        var result = _client.GetStates();
+        if (result.HasError)
+        {
+            return;
+        }
+
+        if (changedEntityId is not null)
+        {
+            RefreshPinnedItem(changedEntityId, result.Items);
+            return;
+        }
+
+        foreach (var entityId in _pinnedItems.Keys)
+        {
+            RefreshPinnedItem(entityId, result.Items);
+        }
+    }
+
+    private void RefreshPinnedItem(string entityId, IReadOnlyCollection<HaEntity> snapshot)
+    {
+        if (!_pinnedItems.TryGetValue(entityId, out var existing))
+        {
+            return;
+        }
+
+        var entity = snapshot.FirstOrDefault(e => string.Equals(e.EntityId, entityId, StringComparison.Ordinal));
+        if (entity is null)
+        {
+            return;
+        }
+
+        CopyItemProperties(CreateItem(entity), existing);
+    }
+
+    private static void CopyItemProperties(ListItem source, ListItem target)
+    {
+        target.Title = source.Title;
+        target.Subtitle = source.Subtitle;
+        target.Icon = source.Icon;
+        target.Tags = source.Tags;
+        target.Details = source.Details;
+        target.MoreCommands = source.MoreCommands;
+        target.Command = source.Command;
+    }
+
+    private static void SetCommandId(ICommand command, string id)
+    {
+        switch (command)
+        {
+            case InvokableCommand invokable:
+                invokable.Id = id;
+                break;
+            case ListPage page:
+                page.Id = id;
+                break;
+        }
     }
 
     private string BuildSubtitle(HaEntity entity)

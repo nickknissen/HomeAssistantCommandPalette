@@ -63,7 +63,9 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
     private readonly HaSettings _settings;
     private readonly IHaClient _apiClient;
     private readonly IEntityIconResolver _iconResolver;
+    private readonly EntityListPage _allEntitiesPage;
     private readonly ICommandItem[] _commands;
+    private readonly ICommandItem[] _dockBands;
 
     public HomeAssistantCommandPaletteCommandsProvider()
     {
@@ -93,12 +95,19 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
         HaTempFiles.CleanupStaleSnapshots();
 
         var commands = new List<ICommandItem>(DomainPages.Length + 1);
+        _allEntitiesPage = new EntityListPage(
+            _settings, _apiClient, _iconResolver, DomainPages[0].Title, DomainPages[0].Id, DomainPages[0].Domains, Icons.App,
+            DomainPages[0].DeviceClasses, DomainPages[0].SortByNumericStateAscending);
 
         foreach (var page in DomainPages)
         {
-            commands.Add(new CommandItem(new EntityListPage(
-                _settings, _apiClient, _iconResolver, page.Title, page.Id, page.Domains, Icons.App,
-                page.DeviceClasses, page.SortByNumericStateAscending))
+            var listPage = page.Id == _allEntitiesPage.Id
+                ? _allEntitiesPage
+                : new EntityListPage(
+                    _settings, _apiClient, _iconResolver, page.Title, page.Id, page.Domains, Icons.App,
+                    page.DeviceClasses, page.SortByNumericStateAscending);
+
+            commands.Add(new CommandItem(listPage)
             {
                 Title = page.Title,
                 Subtitle = "Home Assistant",
@@ -144,10 +153,46 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
         });
 
         _commands = commands.ToArray();
+
+        // Do not advertise category/list pages as dock bands: CmdPal renders
+        // an IListPage band by expanding every row, which can flood the Dock
+        // with hundreds of entities. Users can still pin individual entity
+        // rows; GetCommandItem resolves those stable nested command IDs.
+        _dockBands = [];
     }
 
     public override ICommandItem[] TopLevelCommands()
     {
         return _commands;
     }
+
+    public override ICommandItem[]? GetDockBands()
+    {
+        return _dockBands;
+    }
+
+    public override ICommandItem? GetCommandItem(string id)
+    {
+        foreach (var item in _commands)
+        {
+            if (item.Command?.Id == id)
+            {
+                return item;
+            }
+        }
+
+        foreach (var item in _dockBands)
+        {
+            if (item.Command?.Id == id)
+            {
+                return item;
+            }
+        }
+
+        // Entity rows are nested commands. Giving each row a stable command
+        // id lets CmdPal resolve a device the user pinned directly to the
+        // Dock without expanding a whole domain group into the band.
+        return _allEntitiesPage.TryCreateItemForCommandId(id);
+    }
+
 }
