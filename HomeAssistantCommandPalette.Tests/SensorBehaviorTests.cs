@@ -46,6 +46,49 @@ public class SensorBehaviorTests
         Assert.Empty(rows);
     }
 
+    [Fact]
+    public void Numeric_sensor_adds_24h_trend_row_lazily()
+    {
+        var client = new RecordingHaClient
+        {
+            History = new[]
+            {
+                new HaHistoryPoint(DateTimeOffset.UtcNow.AddHours(-2), 18.2),
+                new HaHistoryPoint(DateTimeOffset.UtcNow.AddHours(-1), 20.0),
+                new HaHistoryPoint(DateTimeOffset.UtcNow, 21.4),
+            },
+        };
+        var entity = MakeEntity("21.4", new Dictionary<string, object?> { ["unit_of_measurement"] = "°C" });
+        var ctx = new DomainCtx(entity, client, new HaSettings(), OnSuccess: () => { });
+
+        var rows = new List<IDetailsElement>();
+        new SensorBehavior().AddDetailRows(in ctx, rows);
+
+        var row = Assert.Single(rows.OfType<DetailsElement>(), r => r.Key == "Trend (24h)");
+        Assert.Contains("18.2 → 21.4°C", ((DetailsLink)row.Data!).Text);
+        Assert.Single(client.HistoryRequests);
+        Assert.Equal("sensor.x", client.HistoryRequests[0].EntityId);
+    }
+
+    [Fact]
+    public void Non_numeric_sensor_does_not_fetch_history_or_add_trend_row()
+    {
+        var client = new RecordingHaClient();
+        var ctx = new DomainCtx(MakeEntity("not-a-number"), client, new HaSettings(), OnSuccess: () => { });
+        var rows = new List<IDetailsElement>();
+
+        new SensorBehavior().AddDetailRows(in ctx, rows);
+
+        Assert.Empty(client.HistoryRequests);
+        Assert.DoesNotContain(rows.OfType<DetailsElement>(), r => r.Key == "Trend (24h)");
+    }
+
+    [Fact]
+    public void Sparkline_maps_low_to_high_blocks()
+    {
+        Assert.Equal("▁▄█", SensorBehavior.BuildSparkline(new[] { 0d, 5d, 10d }, 0, 10));
+    }
+
     // -- Battery bucket dispatch (the load-bearing logic) ---------------
 
     [Theory]

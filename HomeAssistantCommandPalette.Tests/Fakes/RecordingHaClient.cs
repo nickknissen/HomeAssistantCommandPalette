@@ -43,7 +43,17 @@ internal sealed class RecordingHaClient : IHaClient
 
     public HaAssistResult AskAssist(string text) => throw new NotSupportedException();
 
+    public List<(string EntityId, DateTimeOffset Since)> HistoryRequests { get; } = new();
+
+    public IReadOnlyList<HaHistoryPoint> History { get; set; } = Array.Empty<HaHistoryPoint>();
+
     public HaWeatherForecastResult GetWeatherForecast(string entityId) => throw new NotSupportedException();
+
+    public IReadOnlyList<HaHistoryPoint> GetHistory(string entityId, DateTimeOffset since)
+    {
+        HistoryRequests.Add((entityId, since));
+        return History;
+    }
 
     public HaConfigProbe ProbeConfig() => throw new NotSupportedException();
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -39,6 +40,7 @@ public sealed partial class RestHaClient : IHaClient
     private const string AreaMapCacheKey = "area-map";
     private const string CameraKeyPrefix = "camera:";
     private const string PictureKeyPrefix = "picture:";
+    private const string HistoryKeyPrefix = "history:";
 
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(3);
     // Areas rarely change — keep them around longer than the state cache.
@@ -56,6 +58,7 @@ public sealed partial class RestHaClient : IHaClient
     // page renders cheap; if the picture is updated in HA it'll surface on
     // the next CmdPal restart.
     private static readonly TimeSpan EntityPictureTtl = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan HistoryTtl = TimeSpan.FromSeconds(60);
 
     // Jinja template that returns a JSON array of [entity_id, area_name]
     // pairs. HA's `area_name(entity_id)` walks entity → device → area in
@@ -310,6 +313,68 @@ public sealed partial class RestHaClient : IHaClient
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Fetches recent numeric history for one entity via
+    /// <c>GET /api/history/period/{timestamp}?filter_entity_id=...</c>.
+    /// Best-effort: failures and non-numeric states return an empty list.
+    /// Cached per entity/since bucket for 60 seconds so details rendering
+    /// doesn't hammer Home Assistant while the selection moves around.
+    /// </summary>
+    public IReadOnlyList<HaHistoryPoint> GetHistory(string entityId, DateTimeOffset since)
+    {
+        if (string.IsNullOrWhiteSpace(entityId) || !_settings.IsConfigured)
+            return Array.Empty<HaHistoryPoint>();
+
+        var sinceUtc = since.ToUniversalTime();
+        var cacheKey = HistoryKeyPrefix + entityId;
+        if (_cache.TryGetValue(cacheKey, out IReadOnlyList<HaHistoryPoint>? cached) && cached is not null)
+        {
+            return cached;
+        }
+
+        try
+        {
+            var client = GetClient();
+            using var cts = new CancellationTokenSource(DefaultTimeout);
+            var timestamp = sinceUtc.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
+            var url = $"{_settings.Url}/api/history/period/{Uri.EscapeDataString(timestamp)}?filter_entity_id={Uri.EscapeDataString(entityId)}";
+            var response = client.GetAsync(url, cts.Token).GetAwaiter().GetResult();
+            if (!response.IsSuccessStatusCode) return Array.Empty<HaHistoryPoint>();
+
+            var json = response.Content.ReadAsStringAsync(cts.Token).GetAwaiter().GetResult();
+            var points = ParseHistory(json);
+            _cache.Set(cacheKey, points, HistoryTtl);
+            return points;
+        }
+        catch
+        {
+            return Array.Empty<HaHistoryPoint>();
+        }
+    }
+
+    internal static IReadOnlyList<HaHistoryPoint> ParseHistory(string json)
+    {
+        var groups = JsonSerializer.Deserialize(json, HaJsonContext.Default.ListListHaStateDto);
+        if (groups is null) return Array.Empty<HaHistoryPoint>();
+
+        var points = new List<HaHistoryPoint>();
+        foreach (var group in groups)
+        {
+            if (group is null) continue;
+            foreach (var dto in group)
+            {
+                if (string.IsNullOrWhiteSpace(dto.State)) continue;
+                if (!double.TryParse(dto.State, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)) continue;
+                var time = dto.LastChanged ?? dto.LastUpdated;
+                if (time is null) continue;
+                points.Add(new HaHistoryPoint(time.Value, value));
+            }
+        }
+
+        points.Sort((a, b) => a.Time.CompareTo(b.Time));
+        return points;
     }
 
     /// <summary>

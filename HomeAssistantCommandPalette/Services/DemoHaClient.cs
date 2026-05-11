@@ -53,6 +53,9 @@ internal sealed partial class DemoHaClient : IHaClient
     public HaAssistResult AskAssist(string text)
         => new(true, "Demo mode — Assist is offline.", "demo", null);
 
+    public IReadOnlyList<HaHistoryPoint> GetHistory(string entityId, DateTimeOffset since)
+        => Array.Empty<HaHistoryPoint>();
+
     public HaWeatherForecastResult GetWeatherForecast(string entityId)
     {
         var now = DateTimeOffset.Now;

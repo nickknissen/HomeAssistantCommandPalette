@@ -25,6 +25,7 @@ public class CameraBehaviorTests
         public IReadOnlyList<HaCalendarEvent> GetCalendarEvents(HaCalendar calendar, DateTimeOffset start, DateTimeOffset endTime) => throw new NotSupportedException();
         public HaAssistResult AskAssist(string text) => throw new NotSupportedException();
         public HaWeatherForecastResult GetWeatherForecast(string entityId) => throw new NotSupportedException();
+        public IReadOnlyList<HaHistoryPoint> GetHistory(string entityId, DateTimeOffset since) => throw new NotSupportedException();
         public HaConfigProbe ProbeConfig() => throw new NotSupportedException();
         public int LastAreaCount => -1;
         public string LastAreaError => string.Empty;

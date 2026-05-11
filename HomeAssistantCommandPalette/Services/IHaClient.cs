@@ -42,6 +42,8 @@ public interface IHaClient : IDisposable
 
     HaWeatherForecastResult GetWeatherForecast(string entityId);
 
+    IReadOnlyList<HaHistoryPoint> GetHistory(string entityId, DateTimeOffset since);
+
     HaConfigProbe ProbeConfig();
 
     /// <summary>

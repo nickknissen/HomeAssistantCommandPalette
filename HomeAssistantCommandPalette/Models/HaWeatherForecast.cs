@@ -23,3 +23,5 @@ public sealed class HaWeatherForecastResult
     public IReadOnlyList<HaWeatherForecast> Hourly { get; init; } = Array.Empty<HaWeatherForecast>();
     public IReadOnlyList<HaWeatherForecast> Daily { get; init; } = Array.Empty<HaWeatherForecast>();
 }
+
+public sealed record HaHistoryPoint(DateTimeOffset Time, double Value);

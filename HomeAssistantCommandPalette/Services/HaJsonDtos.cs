@@ -139,6 +139,7 @@ internal sealed class HaConfigDto
 
 [JsonSerializable(typeof(HaStateDto))]
 [JsonSerializable(typeof(List<HaStateDto>))]
+[JsonSerializable(typeof(List<List<HaStateDto>>))]
 [JsonSerializable(typeof(List<HaCalendarDto>))]
 [JsonSerializable(typeof(List<HaCalendarEventDto>))]
 [JsonSerializable(typeof(HaAssistDto))]
