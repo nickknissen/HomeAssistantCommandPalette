@@ -42,10 +42,11 @@ public sealed partial class RestHaClient : IHaClient
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(3);
     // Areas rarely change — keep them around longer than the state cache.
     private static readonly TimeSpan AreaCacheTtl = TimeSpan.FromMinutes(5);
-    // When a fetch fails or returns no areas, retry sooner instead of
-    // sitting on a useless cached result for 5 minutes. Covers the case
-    // where the user is fixing their HA config in another tab.
-    private static readonly TimeSpan AreaEmptyRetryTtl = TimeSpan.FromSeconds(30);
+    // When a fetch fails or returns no areas, retry about once per minute
+    // instead of sitting on a useless cached result for 5 minutes. This
+    // avoids getting stuck when HA's area registry is briefly unavailable
+    // during startup, then resumes the long TTL once areas resolve.
+    private static readonly TimeSpan AreaEmptyRetryTtl = TimeSpan.FromMinutes(1);
     // Match Raycast's default camera refresh cadence — short enough that
     // re-opening the page shows recent video, long enough to dedupe back-
     // to-back GetItems calls on the same page render.
