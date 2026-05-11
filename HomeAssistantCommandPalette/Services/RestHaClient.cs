@@ -511,6 +511,31 @@ public sealed partial class RestHaClient : IHaClient
         return payload;
     }
 
+    public HaWeatherForecastResult GetWeatherForecast(string entityId)
+    {
+        if (string.IsNullOrWhiteSpace(entityId))
+        {
+            return new HaWeatherForecastResult { Success = false, Error = "Entity ID is empty." };
+        }
+        if (!_settings.IsConfigured)
+        {
+            return new HaWeatherForecastResult { Success = false, Error = "Home Assistant is not configured." };
+        }
+
+        try
+        {
+            using var cts = new CancellationTokenSource(DefaultTimeout);
+            var hourly = _ws.FetchForecastOnceAsync(entityId, "hourly", cts.Token).GetAwaiter().GetResult();
+            using var cts2 = new CancellationTokenSource(DefaultTimeout);
+            var daily = _ws.FetchForecastOnceAsync(entityId, "daily", cts2.Token).GetAwaiter().GetResult();
+            return new HaWeatherForecastResult { Success = true, Hourly = hourly, Daily = daily };
+        }
+        catch (Exception ex)
+        {
+            return new HaWeatherForecastResult { Success = false, Error = ex.Message };
+        }
+    }
+
     private static HaAssistResult ParseAssistResponse(string json)
     {
         var dto = JsonSerializer.Deserialize(json, HaJsonContext.Default.HaAssistDto);

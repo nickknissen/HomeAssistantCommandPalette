@@ -43,6 +43,8 @@ internal sealed class RecordingHaClient : IHaClient
 
     public HaAssistResult AskAssist(string text) => throw new NotSupportedException();
 
+    public HaWeatherForecastResult GetWeatherForecast(string entityId) => throw new NotSupportedException();
+
     public HaConfigProbe ProbeConfig() => throw new NotSupportedException();
 
     public int LastAreaCount => -1;

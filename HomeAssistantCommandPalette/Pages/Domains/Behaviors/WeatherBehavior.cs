@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using HomeAssistantCommandPalette.Pages;
 using Microsoft.CommandPalette.Extensions;
 using Microsoft.CommandPalette.Extensions.Toolkit;
 
@@ -15,6 +16,9 @@ public sealed class WeatherBehavior : DomainBehavior
     ];
 
     public override string Domain => "weather";
+
+    public override ICommand BuildPrimary(in DomainCtx ctx)
+        => new WeatherForecastPage(ctx.Client, ctx.Settings, ctx.Entity);
 
     public override void AddDetailRows(in DomainCtx ctx, List<IDetailsElement> rows)
     {

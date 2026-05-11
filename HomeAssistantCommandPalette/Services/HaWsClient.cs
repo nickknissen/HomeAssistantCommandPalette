@@ -1,6 +1,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Net.WebSockets;
 using System.Text;
@@ -372,6 +373,132 @@ internal sealed partial class HaWsClient : IDisposable
         try { handler(entityId); }
         catch { /* never let a subscriber kill the read loop */ }
     }
+
+    public async Task<IReadOnlyList<HaWeatherForecast>> FetchForecastOnceAsync(string entityId, string kind, CancellationToken ct)
+    {
+        if (!_settings.IsConfigured) return Array.Empty<HaWeatherForecast>();
+
+        using var ws = new ClientWebSocket();
+        if (_settings.IgnoreCertificateErrors)
+        {
+#pragma warning disable CA5359
+            ws.Options.RemoteCertificateValidationCallback = (_, _, _, _) => true;
+#pragma warning restore CA5359
+        }
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        var token = timeout.Token;
+
+        await ws.ConnectAsync(BuildWsUri(_settings.Url), token).ConfigureAwait(false);
+        using (var hello = await ReceiveJsonAsync(ws, token).ConfigureAwait(false))
+        {
+            if (hello.RootElement.GetProperty("type").GetString() != "auth_required") return Array.Empty<HaWeatherForecast>();
+        }
+
+        await SendJsonAsync(ws, w =>
+        {
+            w.WriteString("type", "auth");
+            w.WriteString("access_token", _settings.Token);
+        }, token).ConfigureAwait(false);
+        using (var auth = await ReceiveJsonAsync(ws, token).ConfigureAwait(false))
+        {
+            if (auth.RootElement.GetProperty("type").GetString() != "auth_ok") return Array.Empty<HaWeatherForecast>();
+        }
+
+        var id = NextId();
+        await SendJsonAsync(ws, w =>
+        {
+            w.WriteNumber("id", id);
+            w.WriteString("type", "weather/subscribe_forecast");
+            w.WriteString("entity_id", entityId);
+            w.WriteString("forecast_type", kind);
+        }, token).ConfigureAwait(false);
+
+        var subscribed = false;
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                using var doc = await ReceiveJsonAsync(ws, token).ConfigureAwait(false);
+                var root = doc.RootElement;
+                if (!root.TryGetProperty("type", out var typeEl)) continue;
+                var frameType = typeEl.GetString();
+                if (frameType == "result" && root.TryGetProperty("id", out var rid) && rid.GetInt32() == id)
+                {
+                    subscribed = root.TryGetProperty("success", out var ok) && ok.GetBoolean();
+                    if (!subscribed) return Array.Empty<HaWeatherForecast>();
+                    continue;
+                }
+
+                if (frameType == "event" && root.TryGetProperty("id", out var eid) && eid.GetInt32() == id)
+                {
+                    var forecastRoot = root.GetProperty("event");
+                    if (forecastRoot.TryGetProperty("forecast", out var forecast))
+                    {
+                        return ParseForecast(forecast);
+                    }
+                    if (forecastRoot.TryGetProperty("data", out var data) && data.TryGetProperty("forecast", out var nested))
+                    {
+                        return ParseForecast(nested);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            if (subscribed && ws.State == WebSocketState.Open)
+            {
+                try
+                {
+                    await SendJsonAsync(ws, w =>
+                    {
+                        w.WriteNumber("id", NextId());
+                        w.WriteString("type", "unsubscribe_events");
+                        w.WriteNumber("subscription", id);
+                    }, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch { }
+            }
+        }
+
+        return Array.Empty<HaWeatherForecast>();
+    }
+
+    private static IReadOnlyList<HaWeatherForecast> ParseForecast(JsonElement forecast)
+    {
+        if (forecast.ValueKind != JsonValueKind.Array) return Array.Empty<HaWeatherForecast>();
+        var items = new List<HaWeatherForecast>();
+        foreach (var item in forecast.EnumerateArray())
+        {
+            DateTimeOffset? time = null;
+            if (item.TryGetProperty("datetime", out var dt) && dt.ValueKind == JsonValueKind.String
+                && DateTimeOffset.TryParse(dt.GetString(), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed))
+            {
+                time = parsed;
+            }
+
+            items.Add(new HaWeatherForecast
+            {
+                Time = time,
+                Condition = StringProp(item, "condition") ?? string.Empty,
+                Temperature = DoubleProp(item, "temperature"),
+                Templow = DoubleProp(item, "templow"),
+                Precipitation = DoubleProp(item, "precipitation"),
+                PrecipitationProbability = DoubleProp(item, "precipitation_probability"),
+                WindSpeed = DoubleProp(item, "wind_speed"),
+                WindBearing = DoubleProp(item, "wind_bearing"),
+                Humidity = DoubleProp(item, "humidity"),
+            });
+        }
+        return items;
+    }
+
+    private static string? StringProp(JsonElement item, string name)
+        => item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static double? DoubleProp(JsonElement item, string name)
+        => item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var v) ? v : null;
 
     private int NextId() => Interlocked.Increment(ref _msgId);
 

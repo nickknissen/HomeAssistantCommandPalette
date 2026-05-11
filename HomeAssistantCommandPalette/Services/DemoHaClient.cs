@@ -53,6 +53,26 @@ internal sealed partial class DemoHaClient : IHaClient
     public HaAssistResult AskAssist(string text)
         => new(true, "Demo mode — Assist is offline.", "demo", null);
 
+    public HaWeatherForecastResult GetWeatherForecast(string entityId)
+    {
+        var now = DateTimeOffset.Now;
+        return new HaWeatherForecastResult
+        {
+            Success = true,
+            Hourly = new[]
+            {
+                new HaWeatherForecast { Time = now.AddHours(1), Condition = "sunny", Temperature = 21, PrecipitationProbability = 5 },
+                new HaWeatherForecast { Time = now.AddHours(2), Condition = "partlycloudy", Temperature = 20, PrecipitationProbability = 10 },
+                new HaWeatherForecast { Time = now.AddHours(3), Condition = "rainy", Temperature = 18, PrecipitationProbability = 60 },
+            },
+            Daily = new[]
+            {
+                new HaWeatherForecast { Time = now.Date, Condition = "sunny", Temperature = 22, Templow = 14, PrecipitationProbability = 5 },
+                new HaWeatherForecast { Time = now.Date.AddDays(1), Condition = "rainy", Temperature = 18, Templow = 12, PrecipitationProbability = 70 },
+            },
+        };
+    }
+
     public HaConfigProbe ProbeConfig()
         => new(true, HaErrorKind.None, null, "demo", "Demo Home", "UTC", "RUNNING", 0);
 

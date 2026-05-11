@@ -40,6 +40,8 @@ public interface IHaClient : IDisposable
 
     HaAssistResult AskAssist(string text);
 
+    HaWeatherForecastResult GetWeatherForecast(string entityId);
+
     HaConfigProbe ProbeConfig();
 
     /// <summary>
