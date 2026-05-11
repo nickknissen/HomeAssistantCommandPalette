@@ -11,9 +11,15 @@ The WinRT IIDs differ between versions, so an extension built against the
 NuGet package fails CmdPal's `(ICommandProvider)result` cast at activation —
 silently — and never appears in the palette. See PowerToys#47076 / #38273.
 
-The build script (`TablePlusCommandPalette/build-msix.ps1`) overrides the
+The build script (`HomeAssistantCommandPalette/build-msix.ps1`) overrides the
 NuGet-shipped DLL/winmd with the files from this directory before packing
 the MSIX, so the runtime IIDs match what CmdPal expects.
+
+The vendored assembly and WinMD are architecture-neutral metadata/managed
+assets, so the same files are used for both x64 and arm64 packages. If a
+future Command Palette release ships architecture-specific SDK binaries,
+re-extract these files from the matching architecture install and note it
+below.
 
 ## Source version
 

@@ -53,6 +53,11 @@ $MsixPath = Join-Path $ProjectDir "bin\Release\msix\HomeAssistantCommandPalette_
 
 Write-Host "=== dev-deploy: $Version ($Platform) ===" -ForegroundColor Green
 
+$CurrentArchitecture = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }
+if ($Platform -ne $CurrentArchitecture) {
+    throw "dev-deploy installs on the local machine, so -Platform must match this machine architecture ($CurrentArchitecture). Use build-msix.ps1 -Platforms $Platform to cross-build without installing."
+}
+
 # ---------- 1. Build ----------
 Write-Host "`n[1/5] Building MSIX..." -ForegroundColor Cyan
 & $BuildScript -Version $Version -Platforms $Platform

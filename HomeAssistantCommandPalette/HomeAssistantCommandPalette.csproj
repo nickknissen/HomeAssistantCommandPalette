@@ -14,6 +14,7 @@
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <Platforms>x64;arm64</Platforms>
 
     <EnableMsixTooling>true</EnableMsixTooling>
     <Nullable>enable</Nullable>
