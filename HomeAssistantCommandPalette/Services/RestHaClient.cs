@@ -47,11 +47,10 @@ public sealed partial class RestHaClient : IHaClient
     // avoids getting stuck when HA's area registry is briefly unavailable
     // during startup, then resumes the long TTL once areas resolve.
     private static readonly TimeSpan AreaEmptyRetryTtl = TimeSpan.FromMinutes(1);
-    // Match Raycast's default camera refresh cadence. Keep this in sync
-    // with EntityListPage's camera auto-refresh timer so each tick can
-    // fetch a fresh snapshot while still deduping back-to-back GetItems
-    // calls on the same page render.
-    private static readonly TimeSpan CameraSnapshotTtl = TimeSpan.FromSeconds(3);
+    // Default camera refresh cadence. The effective snapshot TTL follows
+    // the user setting so auto-refresh ticks can fetch fresh images while
+    // still deduping back-to-back GetItems calls on the same page render.
+    private static readonly TimeSpan DefaultCameraSnapshotTtl = TimeSpan.FromSeconds(3);
     // Avatars / entity pictures change rarely. A long TTL keeps repeat
     // page renders cheap; if the picture is updated in HA it'll surface on
     // the next CmdPal restart.
@@ -188,9 +187,9 @@ public sealed partial class RestHaClient : IHaClient
     /// Fetches the latest snapshot from <c>/api/camera_proxy/{entity_id}</c>
     /// and writes it to a temp file. Returns the absolute file path on
     /// success or null on any failure (auth, timeout, missing camera).
-    /// Cached per-entity for <see cref="CameraSnapshotTtl"/> so a single
-    /// page render with N cameras issues at most N HTTP gets, and a
-    /// follow-up render within the TTL re-uses the cached file.
+    /// Cached per-entity for the configured camera refresh cadence so a
+    /// single page render with N cameras issues at most N HTTP gets, and
+    /// a follow-up render within the TTL re-uses the cached file.
     /// </summary>
     public string? GetCameraSnapshotPath(string entityId)
     {
@@ -230,7 +229,7 @@ public sealed partial class RestHaClient : IHaClient
             var path = Path.Combine(dir, $"{safe}.{ext}");
             File.WriteAllBytes(path, bytes);
 
-            _cache.Set(cacheKey, path, CameraSnapshotTtl);
+            _cache.Set(cacheKey, path, GetCameraSnapshotTtl());
             return path;
         }
         catch
@@ -831,6 +830,11 @@ public sealed partial class RestHaClient : IHaClient
             return null;
         }
     }
+
+    private TimeSpan GetCameraSnapshotTtl()
+        => _settings.CameraRefreshIntervalMs > 0
+            ? TimeSpan.FromMilliseconds(_settings.CameraRefreshIntervalMs)
+            : DefaultCameraSnapshotTtl;
 
     private static string Truncate(string s, int max)
     {

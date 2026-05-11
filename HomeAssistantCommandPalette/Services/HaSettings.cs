@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using Microsoft.CommandPalette.Extensions.Toolkit;
 
@@ -61,6 +62,15 @@ public sealed class HaSettings : JsonSettingsManager
         "Filter out entities whose state is 'unavailable' from all list pages.",
         false);
 
+    private readonly TextSetting _cameraRefreshIntervalSetting = new(
+        "ha-camera-refresh-interval-ms",
+        "Camera refresh interval (ms)",
+        "How often the Cameras page refreshes snapshots. Default: 3000. Set to 0 to disable auto-refresh.",
+        "3000")
+    {
+        Placeholder = "3000",
+    };
+
     public HaSettings()
     {
         FilePath = SettingsJsonPath();
@@ -71,6 +81,7 @@ public sealed class HaSettings : JsonSettingsManager
         Settings.Add(_dashboardPathSetting);
         Settings.Add(_showEntityIdSetting);
         Settings.Add(_hideUnavailableSetting);
+        Settings.Add(_cameraRefreshIntervalSetting);
 
         LoadSettings();
 
@@ -99,6 +110,17 @@ public sealed class HaSettings : JsonSettingsManager
     public bool ShowEntityId => _showEntityIdSetting.Value;
 
     public bool HideUnavailable => _hideUnavailableSetting.Value;
+
+    public int CameraRefreshIntervalMs
+    {
+        get
+        {
+            var raw = (_cameraRefreshIntervalSetting.Value ?? string.Empty).Trim();
+            return int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) && value >= 0
+                ? value
+                : 3000;
+        }
+    }
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Url) && !string.IsNullOrWhiteSpace(Token);
 

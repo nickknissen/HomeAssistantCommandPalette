@@ -41,11 +41,11 @@ internal sealed partial class EntityListPage : ListPage
     // automation toggling 20 lights). Coalesce into one RaiseItemsChanged
     // call per quiet window so we don't thrash CmdPal's render path.
     private static readonly TimeSpan WsRefreshDebounce = TimeSpan.FromMilliseconds(250);
-    private static readonly TimeSpan CameraAutoRefreshInterval = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan CameraAutoRefreshIdleGrace = TimeSpan.FromMilliseconds(500);
     private readonly System.Threading.Timer _wsRefreshTimer;
     private readonly System.Threading.Timer? _cameraRefreshTimer;
     private readonly bool _autoRefreshCameras;
+    private readonly TimeSpan _cameraAutoRefreshInterval;
     private long _lastCameraGetItemsUtcTicks;
 
     public EntityListPage(
@@ -65,7 +65,8 @@ internal sealed partial class EntityListPage : ListPage
         _domains = domains is null ? null : new HashSet<string>(domains, StringComparer.Ordinal);
         _deviceClasses = deviceClasses is null ? null : new HashSet<string>(deviceClasses, StringComparer.Ordinal);
         _sortByNumericStateAscending = sortByNumericStateAscending;
-        _autoRefreshCameras = IsCameraAutoRefreshPage(_domains, _deviceClasses);
+        _cameraAutoRefreshInterval = CameraAutoRefreshIntervalFromSettings(_settings);
+        _autoRefreshCameras = IsCameraAutoRefreshPage(_domains, _deviceClasses) && _cameraAutoRefreshInterval > TimeSpan.Zero;
 
         Icon = icon ?? Icons.App;
         Title = title;
@@ -208,18 +209,23 @@ internal sealed partial class EntityListPage : ListPage
             && domains.Count == 1
             && domains.Contains("camera");
 
+    internal static TimeSpan CameraAutoRefreshIntervalFromSettings(HaSettings settings)
+        => settings.CameraRefreshIntervalMs <= 0
+            ? TimeSpan.Zero
+            : TimeSpan.FromMilliseconds(settings.CameraRefreshIntervalMs);
+
     private void TouchCameraAutoRefresh()
     {
         if (!_autoRefreshCameras || _cameraRefreshTimer is null) return;
 
         System.Threading.Interlocked.Exchange(ref _lastCameraGetItemsUtcTicks, DateTime.UtcNow.Ticks);
-        _cameraRefreshTimer.Change(CameraAutoRefreshInterval, CameraAutoRefreshInterval);
+        _cameraRefreshTimer.Change(_cameraAutoRefreshInterval, _cameraAutoRefreshInterval);
     }
 
     private void OnCameraRefreshTimerTick()
     {
         var lastTicks = System.Threading.Interlocked.Read(ref _lastCameraGetItemsUtcTicks);
-        if (lastTicks == 0 || DateTime.UtcNow - new DateTime(lastTicks, DateTimeKind.Utc) > CameraAutoRefreshInterval + CameraAutoRefreshIdleGrace)
+        if (lastTicks == 0 || DateTime.UtcNow - new DateTime(lastTicks, DateTimeKind.Utc) > _cameraAutoRefreshInterval + CameraAutoRefreshIdleGrace)
         {
             _cameraRefreshTimer?.Change(System.Threading.Timeout.InfiniteTimeSpan, System.Threading.Timeout.InfiniteTimeSpan);
             return;
