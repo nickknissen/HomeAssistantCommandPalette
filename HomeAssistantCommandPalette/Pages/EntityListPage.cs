@@ -82,6 +82,16 @@ internal sealed partial class EntityListPage : ListPage
         ShowDetails = true;
         PlaceholderText = $"Search {title.ToLowerInvariant()}";
 
+        if (IsCameraAutoRefreshPage(_domains, _deviceClasses))
+        {
+            ShowDetails = false;
+            GridProperties = new GalleryGridLayout
+            {
+                ShowTitle = true,
+                ShowSubtitle = true,
+            };
+        }
+
         _wsRefreshTimer = new System.Threading.Timer(_ =>
         {
             try { RaiseItemsChanged(0); } catch { /* page may be torn down */ }
@@ -315,16 +325,18 @@ internal sealed partial class EntityListPage : ListPage
             Metadata = rows.ToArray(),
         };
         // HeroImage: only behaviors that need one (e.g. camera) override
-        // BuildHeroImage; the toolkit type rejects null assignment.
+        // BuildHeroImage; the toolkit type rejects null assignment. Camera
+        // grid cards also use the snapshot as the item icon/thumbnail.
         var hero = behavior.BuildHeroImage(in ctx);
         if (hero is not null) details.HeroImage = hero;
+        var itemIcon = hero ?? _iconResolver.Resolve(entity);
 
         return new ListItem(primary)
         {
             Title = entity.FriendlyName,
             Subtitle = BuildSubtitle(entity),
             Tags = BuildTags(entity),
-            Icon = _iconResolver.Resolve(entity),
+            Icon = itemIcon,
             MoreCommands = ctxItems.ToArray(),
             Details = details,
         };
