@@ -36,6 +36,7 @@ internal sealed partial class EntityListPage : ListPage
     private readonly HashSet<string>? _domains;
     private readonly HashSet<string>? _deviceClasses;
     private readonly bool _sortByNumericStateAscending;
+    private readonly bool _openAttributesPage;
 
     // HA can burst many state_changed events in a short window (e.g. an
     // automation toggling 20 lights). Coalesce into one RaiseItemsChanged
@@ -57,7 +58,8 @@ internal sealed partial class EntityListPage : ListPage
         IReadOnlyCollection<string>? domains = null,
         IconInfo? icon = null,
         IReadOnlyCollection<string>? deviceClasses = null,
-        bool sortByNumericStateAscending = false)
+        bool sortByNumericStateAscending = false,
+        bool openAttributesPage = false)
     {
         _settings = settings;
         _client = client;
@@ -65,6 +67,7 @@ internal sealed partial class EntityListPage : ListPage
         _domains = domains is null ? null : new HashSet<string>(domains, StringComparer.Ordinal);
         _deviceClasses = deviceClasses is null ? null : new HashSet<string>(deviceClasses, StringComparer.Ordinal);
         _sortByNumericStateAscending = sortByNumericStateAscending;
+        _openAttributesPage = openAttributesPage;
         _cameraAutoRefreshInterval = CameraAutoRefreshIntervalFromSettings(_settings);
         _autoRefreshCameras = IsCameraAutoRefreshPage(_domains, _deviceClasses) && _cameraAutoRefreshInterval > TimeSpan.Zero;
 
@@ -239,7 +242,9 @@ internal sealed partial class EntityListPage : ListPage
         var behavior = DomainRegistry.For(entity.Domain, entity.EntityId);
         var ctx = new DomainCtx(entity, _client, _settings, OnServiceCallSucceeded);
 
-        var primary = behavior.BuildPrimary(in ctx);
+        var primary = _openAttributesPage
+            ? new EntityAttributesPage(entity)
+            : behavior.BuildPrimary(in ctx);
 
         var rows = new List<IDetailsElement> { DomainHelpers.Row("State", DomainHelpers.FormatStateWithUnit(entity)) };
         behavior.AddDetailRows(in ctx, rows);

@@ -106,6 +106,15 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
             });
         }
 
+        commands.Add(new CommandItem(new EntityListPage(
+            _settings, _apiClient, _iconResolver, "All Entities with Attributes", "ha.entities.all-attributes",
+            domains: null, icon: Icons.App, openAttributesPage: true))
+        {
+            Title = "All Entities with Attributes",
+            Subtitle = "Home Assistant",
+            Icon = Icons.App,
+        });
+
         commands.Add(new CommandItem(new OpenDashboardCommand(_settings))
         {
             Title = "Open Dashboard",
