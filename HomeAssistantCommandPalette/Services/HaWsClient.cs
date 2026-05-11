@@ -42,6 +42,7 @@ internal sealed partial class HaWsClient : IDisposable
     private string _lastUrl = string.Empty;
     private string _lastToken = string.Empty;
     private bool _lastIgnoreCerts;
+    private string _lastHeadersFingerprint = string.Empty;
 
     public HaWsClient(HaSettings settings)
     {
@@ -82,12 +83,14 @@ internal sealed partial class HaWsClient : IDisposable
         var url = _settings.Url;
         var token = _settings.Token;
         var ignoreCerts = _settings.IgnoreCertificateErrors;
+        var headersFingerprint = _settings.CustomHeadersFingerprint;
 
         // Already running for the same connection identity? Leave it alone.
         if (_runTask is { IsCompleted: false }
             && string.Equals(_lastUrl, url, StringComparison.OrdinalIgnoreCase)
             && string.Equals(_lastToken, token, StringComparison.Ordinal)
-            && _lastIgnoreCerts == ignoreCerts)
+            && _lastIgnoreCerts == ignoreCerts
+            && string.Equals(_lastHeadersFingerprint, headersFingerprint, StringComparison.Ordinal))
         {
             return;
         }
@@ -97,6 +100,7 @@ internal sealed partial class HaWsClient : IDisposable
         _lastUrl = url;
         _lastToken = token;
         _lastIgnoreCerts = ignoreCerts;
+        _lastHeadersFingerprint = headersFingerprint;
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
         _runTask = Task.Run(() => RunWithBackoffAsync(ct), ct);
@@ -174,6 +178,8 @@ internal sealed partial class HaWsClient : IDisposable
             ws.Options.RemoteCertificateValidationCallback = (_, _, _, _) => true;
 #pragma warning restore CA5359
         }
+
+        ApplyCustomHeaders(ws);
 
         var wsUri = BuildWsUri(_lastUrl);
         // Timeout the connect attempt — ConnectAsync can otherwise hang
@@ -385,6 +391,7 @@ internal sealed partial class HaWsClient : IDisposable
             ws.Options.RemoteCertificateValidationCallback = (_, _, _, _) => true;
 #pragma warning restore CA5359
         }
+        ApplyCustomHeaders(ws);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(10));
@@ -575,6 +582,15 @@ internal sealed partial class HaWsClient : IDisposable
         finally
         {
             ArrayPool<byte>.Shared.Return(pooled);
+        }
+    }
+
+    private void ApplyCustomHeaders(ClientWebSocket ws)
+    {
+        foreach (var (name, value) in _settings.CustomHeaders)
+        {
+            try { ws.Options.SetRequestHeader(name, value); }
+            catch { /* malformed/custom restricted header: ignore */ }
         }
     }
 

@@ -29,6 +29,7 @@ public sealed partial class RestHaClient : IHaClient
     private string _clientUrl = string.Empty;
     private string _clientToken = string.Empty;
     private bool _clientIgnoreCerts;
+    private string _clientHeadersFingerprint = string.Empty;
 
     // Single MemoryCache backs all per-request caching. Keys are namespaced
     // by prefix so the four logical caches don't collide.
@@ -937,7 +938,8 @@ public sealed partial class RestHaClient : IHaClient
             if (_client is not null
                 && string.Equals(_clientUrl, _settings.Url, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(_clientToken, _settings.Token, StringComparison.Ordinal)
-                && _clientIgnoreCerts == _settings.IgnoreCertificateErrors)
+                && _clientIgnoreCerts == _settings.IgnoreCertificateErrors
+                && string.Equals(_clientHeadersFingerprint, _settings.CustomHeadersFingerprint, StringComparison.Ordinal))
             {
                 return _client;
             }
@@ -963,11 +965,17 @@ public sealed partial class RestHaClient : IHaClient
             };
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _settings.Token);
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            foreach (var (name, value) in _settings.CustomHeaders)
+            {
+                try { client.DefaultRequestHeaders.TryAddWithoutValidation(name, value); }
+                catch { /* malformed custom header: ignore, don't break HA connectivity */ }
+            }
 
             _client = client;
             _clientUrl = _settings.Url;
             _clientToken = _settings.Token;
             _clientIgnoreCerts = _settings.IgnoreCertificateErrors;
+            _clientHeadersFingerprint = _settings.CustomHeadersFingerprint;
             return _client;
         }
     }

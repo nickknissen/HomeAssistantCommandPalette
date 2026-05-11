@@ -16,6 +16,8 @@ Home Assistant entities from CmdPal.
    - **Home Assistant URL** — e.g. `http://homeassistant.local:8123`
    - **Long-Lived Access Token** — paste from step 1
    - **Ignore TLS certificate errors** — only for self-signed certs on a LAN
+   - **Custom HTTP headers** — optional, one `Header: Value` pair per line for
+     proxies such as Cloudflare Access
 
 Settings are stored at:
 
@@ -33,10 +35,11 @@ process already running as that user could read it.
 
 If your environment requires stronger at-rest protection, create a dedicated HA
 token with only the access you are comfortable exposing, rotate it regularly,
-and delete the token from the extension settings when you stop using it. Moving
-the token to Windows Credential Manager remains a possible future hardening
-step, but the current project decision is to keep the token in local settings
-and document the trade-off clearly.
+and delete the token from the extension settings when you stop using it. Custom
+HTTP header values are stored in the same file and have the same trust boundary.
+Moving the token to Windows Credential Manager remains a possible future
+hardening step, but the current project decision is to keep the token in local
+settings and document the trade-off clearly.
 
 ## How it works
 
