@@ -23,6 +23,21 @@ Settings are stored at:
 %LOCALAPPDATA%\HomeAssistantCommandPalette\settings.json
 ```
 
+### Token storage
+
+The Long-Lived Access Token is stored in plain text in that local
+`settings.json` file. This keeps setup simple and matches the current CmdPal
+settings toolkit, which does not provide a password/secret setting. The file is
+under `%LOCALAPPDATA%`, so it is scoped to the signed-in Windows user, but any
+process already running as that user could read it.
+
+If your environment requires stronger at-rest protection, create a dedicated HA
+token with only the access you are comfortable exposing, rotate it regularly,
+and delete the token from the extension settings when you stop using it. Moving
+the token to Windows Credential Manager remains a possible future hardening
+step, but the current project decision is to keep the token in local settings
+and document the trade-off clearly.
+
 ## How it works
 
 - `GET {url}/api/states` is called every time the list is opened (with a
@@ -65,10 +80,8 @@ there to expose another domain.
   extension. Replace them with Home Assistant–themed art before publishing.
 - `Package.appxmanifest` declares `internetClient` and `privateNetworkClientServer`
   capabilities — required for HTTP calls to the HA instance.
-- The token is stored in plain text in `settings.json` (CmdPal's toolkit has
-  no password setting today). The file is in `%LOCALAPPDATA%`, which is
-  per-user, but if your threat model requires more, pull the token from
-  Windows Credential Manager instead.
+- See [Token storage](#token-storage) for the current settings.json vs.
+  Windows Credential Manager decision and threat model.
 
 ## Roadmap
 
