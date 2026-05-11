@@ -10,9 +10,8 @@
     2. sign-local.ps1   — signtool sign with the 1Password cert
     3. uninstall.ps1    — remove every previously installed copy
     4. Add-AppxPackage  — install the freshly signed MSIX
-
-  Restart PowerToys / Command Palette after this script finishes so CmdPal
-  re-enumerates the AppExtensionCatalog.
+    5. wait briefly      — let Windows' AppExtension catalog settle
+    6. launch CmdPal     — relaunch after the catalog refresh window
 
 .PARAMETER Version
   Three-part version. The .0 revision is appended automatically.
@@ -24,6 +23,11 @@
   Skip the 1Password signing step. The resulting MSIX won't install on a
   machine that doesn't trust the unsigned package — only useful if you
   want to inspect the staging output.
+
+.PARAMETER LaunchDelaySeconds
+  Seconds to wait after Add-AppxPackage before relaunching CmdPal. This gives
+  Windows' AppExtension catalog time to observe the new package and avoids the
+  occasional stale-extension load that otherwise requires a second restart.
 
 .EXAMPLE
   .\scripts\dev-deploy.ps1
@@ -37,7 +41,10 @@ param(
     [ValidateSet('x64', 'arm64')]
     [string]$Platform = $(if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x64' }),
 
-    [switch]$SkipSign
+    [switch]$SkipSign,
+
+    [ValidateRange(0, 30)]
+    [int]$LaunchDelaySeconds = 3
 )
 
 $ErrorActionPreference = 'Stop'
@@ -77,20 +84,31 @@ if ($SkipSign) {
 # CmdPal hosts the extension via COM; if it's running, it has the .dll
 # loaded and Add-AppxPackage races with the lock. Kill the UI plus any
 # extension COM servers before reinstalling.
-Write-Host "`n[3/5] Stopping Command Palette..." -ForegroundColor Cyan
+Write-Host "`n[3/6] Stopping Command Palette..." -ForegroundColor Cyan
 Get-Process |
     Where-Object { $_.ProcessName -match '^(Microsoft\.CmdPal\.UI|Microsoft\.CmdPal\.Ext\.|HomeAssistantCommandPalette)$' } |
     Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Milliseconds 500
 
 # ---------- 4. Uninstall + install ----------
-Write-Host "`n[4/5] Reinstalling..." -ForegroundColor Cyan
+Write-Host "`n[4/6] Reinstalling..." -ForegroundColor Cyan
 & $UninstallScript
 Add-AppxPackage -Path $MsixPath
 $installed = Get-AppxPackage NickNissen.HomeAssistantforCommandPalette
 if (-not $installed) { throw "Add-AppxPackage didn't register the package." }
 
-# ---------- 5. Launch Command Palette ----------
-Write-Host "`n[5/5] Launching Command Palette..." -ForegroundColor Cyan
+# ---------- 5. Wait for AppExtension catalog ----------
+# Without a small settle window, CmdPal can occasionally relaunch against the
+# cached AppExtension catalog and host the previous build until the user restarts
+# it manually. The delay is configurable for local tuning, but defaults to the
+# shortest value that has been reliable in dev loops.
+if ($LaunchDelaySeconds -gt 0) {
+    Write-Host "`n[5/6] Waiting $LaunchDelaySeconds second(s) for AppExtension catalog refresh..." -ForegroundColor Cyan
+    Start-Sleep -Seconds $LaunchDelaySeconds
+}
+
+# ---------- 6. Launch Command Palette ----------
+Write-Host "`n[6/6] Launching Command Palette..." -ForegroundColor Cyan
 Start-Process 'explorer.exe' 'shell:AppsFolder\Microsoft.CommandPalette_8wekyb3d8bbwe!App'
 
 Write-Host "`n=== Deployed ===" -ForegroundColor Green
