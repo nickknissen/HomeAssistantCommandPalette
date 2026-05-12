@@ -40,6 +40,7 @@ internal sealed partial class EntityListPage : ListPage
     private readonly HashSet<string>? _deviceClasses;
     private readonly bool _sortByNumericStateAscending;
     private readonly bool _openAttributesPage;
+    private readonly bool _onlyOnState;
     private readonly ConcurrentDictionary<string, ListItem> _pinnedItems = new(StringComparer.Ordinal);
 
     // HA can burst many state_changed events in a short window (e.g. an
@@ -63,7 +64,8 @@ internal sealed partial class EntityListPage : ListPage
         IconInfo? icon = null,
         IReadOnlyCollection<string>? deviceClasses = null,
         bool sortByNumericStateAscending = false,
-        bool openAttributesPage = false)
+        bool openAttributesPage = false,
+        bool onlyOnState = false)
     {
         _settings = settings;
         _client = client;
@@ -72,6 +74,7 @@ internal sealed partial class EntityListPage : ListPage
         _deviceClasses = deviceClasses is null ? null : new HashSet<string>(deviceClasses, StringComparer.Ordinal);
         _sortByNumericStateAscending = sortByNumericStateAscending;
         _openAttributesPage = openAttributesPage;
+        _onlyOnState = onlyOnState;
         _cameraAutoRefreshInterval = CameraAutoRefreshIntervalFromSettings(_settings);
         _autoRefreshCameras = IsCameraAutoRefreshPage(_domains, _deviceClasses) && _cameraAutoRefreshInterval > TimeSpan.Zero;
 
@@ -185,6 +188,13 @@ internal sealed partial class EntityListPage : ListPage
         {
             items = items.Where(e => e.Attributes.TryGetValue("device_class", out var dc)
                 && dc is string dcs && _deviceClasses.Contains(dcs));
+        }
+        if (_onlyOnState)
+        {
+            // Pending-only filter for the dock band's Updates view —
+            // hides update entities whose state is "off" (already
+            // installed) so the row count matches the dock band's badge.
+            items = items.Where(e => string.Equals(e.State, "on", StringComparison.OrdinalIgnoreCase));
         }
         if (_sortByNumericStateAscending)
         {

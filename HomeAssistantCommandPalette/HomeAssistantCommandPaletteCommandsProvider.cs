@@ -64,6 +64,8 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
     private readonly IHaClient _apiClient;
     private readonly IEntityIconResolver _iconResolver;
     private readonly EntityListPage _allEntitiesPage;
+    private readonly HomeAssistantDockBand _dockBandPage;
+    private readonly CommandItem _dockBandItem;
     private readonly ICommandItem[] _commands;
     private readonly ICommandItem[] _dockBands;
 
@@ -161,11 +163,32 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
 
         _commands = commands.ToArray();
 
-        // Do not advertise category/list pages as dock bands: CmdPal renders
-        // an IListPage band by expanding every row, which can flood the Dock
-        // with hundreds of entities. Users can still pin individual entity
-        // rows; GetCommandItem resolves those stable nested command IDs.
-        _dockBands = [];
+        // The dock band is a curated 2-row landing page (Repairs + Updates).
+        // CmdPal expands an IListPage band by inlining its rows, so we
+        // deliberately keep the page short — exposing the full entity
+        // surface as a band would flood the Dock. The band's title gets a
+        // refreshed pending-count tag on every TopLevelCommands tick via
+        // RefreshDockBandTags().
+        _dockBandPage = new HomeAssistantDockBand(_settings, _apiClient, _iconResolver);
+        _dockBandItem = new CommandItem(_dockBandPage)
+        {
+            Title = "Home Assistant",
+            Subtitle = "Repairs and updates",
+            Icon = Icons.App,
+        };
+        RefreshDockBandTags();
+        _dockBands = [_dockBandItem];
+
+        // Live-refresh the band's pending-count tag. Cheap: both counts
+        // are cached for ~30 s, so the bursty event firehose collapses to
+        // at most a few re-renders per second.
+        _apiClient.StateChanged += _ => RefreshDockBandTags();
+    }
+
+    private void RefreshDockBandTags()
+    {
+        var n = _dockBandPage.GetPendingCount();
+        _dockBandItem.Title = n > 0 ? $"Home Assistant ({n})" : "Home Assistant";
     }
 
     public override ICommandItem[] TopLevelCommands()

@@ -472,6 +472,123 @@ internal sealed partial class HaWsClient : IDisposable
         return Array.Empty<HaWeatherForecast>();
     }
 
+    /// <summary>
+    /// One-shot fetch of the HA issue registry via the WebSocket command
+    /// <c>repairs/list_issues</c>. Opens a fresh socket, authenticates,
+    /// awaits the single result frame, and closes. Errors return an empty
+    /// list — the caller surfaces "no repairs" rather than failing the
+    /// dock band.
+    /// </summary>
+    public async Task<IReadOnlyList<HaRepair>> FetchRepairsOnceAsync(CancellationToken ct)
+    {
+        if (!_settings.IsConfigured) return Array.Empty<HaRepair>();
+
+        using var ws = new ClientWebSocket();
+        if (_settings.IgnoreCertificateErrors)
+        {
+#pragma warning disable CA5359
+            ws.Options.RemoteCertificateValidationCallback = (_, _, _, _) => true;
+#pragma warning restore CA5359
+        }
+        ApplyCustomHeaders(ws);
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        var token = timeout.Token;
+
+        await ws.ConnectAsync(BuildWsUri(_settings.Url), token).ConfigureAwait(false);
+        using (var hello = await ReceiveJsonAsync(ws, token).ConfigureAwait(false))
+        {
+            if (hello.RootElement.GetProperty("type").GetString() != "auth_required") return Array.Empty<HaRepair>();
+        }
+
+        await SendJsonAsync(ws, w =>
+        {
+            w.WriteString("type", "auth");
+            w.WriteString("access_token", _settings.Token);
+        }, token).ConfigureAwait(false);
+        using (var auth = await ReceiveJsonAsync(ws, token).ConfigureAwait(false))
+        {
+            if (auth.RootElement.GetProperty("type").GetString() != "auth_ok") return Array.Empty<HaRepair>();
+        }
+
+        var id = NextId();
+        await SendJsonAsync(ws, w =>
+        {
+            w.WriteNumber("id", id);
+            w.WriteString("type", "repairs/list_issues");
+        }, token).ConfigureAwait(false);
+
+        while (!token.IsCancellationRequested)
+        {
+            using var doc = await ReceiveJsonAsync(ws, token).ConfigureAwait(false);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("type", out var typeEl)) continue;
+            if (typeEl.GetString() != "result") continue;
+            if (!root.TryGetProperty("id", out var rid) || rid.GetInt32() != id) continue;
+            if (!root.TryGetProperty("success", out var ok) || !ok.GetBoolean()) return Array.Empty<HaRepair>();
+            if (!root.TryGetProperty("result", out var result)) return Array.Empty<HaRepair>();
+            return ParseRepairs(result);
+        }
+        return Array.Empty<HaRepair>();
+    }
+
+    private static IReadOnlyList<HaRepair> ParseRepairs(JsonElement result)
+    {
+        var dto = result.Deserialize(HaJsonContext.Default.HaRepairsListDto);
+        if (dto?.Issues is null) return Array.Empty<HaRepair>();
+
+        var list = new List<HaRepair>(dto.Issues.Count);
+        foreach (var item in dto.Issues)
+        {
+            if (string.IsNullOrEmpty(item.IssueId)) continue;
+            // Newer HA versions only ship `translation_key` and rely on the
+            // frontend to render translations. We don't have the
+            // translation files; fall back to the key itself so the user
+            // sees *something* instead of an empty row.
+            var summary = !string.IsNullOrEmpty(item.Summary) ? item.Summary
+                : !string.IsNullOrEmpty(item.TranslationKey) ? Humanize(item.TranslationKey)
+                : item.IssueId;
+            list.Add(new HaRepair(
+                IssueId: item.IssueId,
+                Domain: item.Domain ?? string.Empty,
+                Severity: item.Severity ?? "warning",
+                Summary: summary,
+                LearnMoreUrl: string.IsNullOrEmpty(item.LearnMoreUrl) ? null : item.LearnMoreUrl,
+                BreaksInHaVersion: string.IsNullOrEmpty(item.BreaksInHaVersion) ? null : item.BreaksInHaVersion,
+                Created: item.Created,
+                Ignored: item.Ignored ?? false,
+                IsFixable: item.IsFixable ?? false));
+        }
+
+        // Critical → error → warning → other. Within a severity bucket,
+        // most recent first so the freshest problem surfaces at the top.
+        list.Sort((a, b) =>
+        {
+            var rank = SeverityRank(a.Severity).CompareTo(SeverityRank(b.Severity));
+            if (rank != 0) return rank;
+            var ac = a.Created ?? DateTimeOffset.MinValue;
+            var bc = b.Created ?? DateTimeOffset.MinValue;
+            return bc.CompareTo(ac);
+        });
+        return list;
+    }
+
+    private static int SeverityRank(string severity) => severity switch
+    {
+        "critical" => 0,
+        "error" => 1,
+        "warning" => 2,
+        _ => 3,
+    };
+
+    private static string Humanize(string key)
+    {
+        if (string.IsNullOrEmpty(key)) return key;
+        var spaced = key.Replace('_', ' ');
+        return char.ToUpperInvariant(spaced[0]) + spaced[1..];
+    }
+
     private static IReadOnlyList<HaWeatherForecast> ParseForecast(JsonElement forecast)
     {
         if (forecast.ValueKind != JsonValueKind.Array) return Array.Empty<HaWeatherForecast>();

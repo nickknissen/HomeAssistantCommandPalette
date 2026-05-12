@@ -137,6 +137,32 @@ internal sealed class HaConfigDto
     [JsonPropertyName("state")] public string? State { get; init; }
 }
 
+// repairs/list_issues response: { "issues": [ HaRepairDto, ... ] }.
+// Fields mirror Home Assistant's IssueRegistryItem; everything is optional
+// because HA freely adds new fields and we only render a stable subset.
+internal sealed class HaRepairsListDto
+{
+    [JsonPropertyName("issues")] public List<HaRepairDto>? Issues { get; init; }
+}
+
+internal sealed class HaRepairDto
+{
+    [JsonPropertyName("issue_id")] public string? IssueId { get; init; }
+    [JsonPropertyName("domain")] public string? Domain { get; init; }
+    [JsonPropertyName("severity")] public string? Severity { get; init; }
+    // Newer HA versions populate the translated text under `translation_key`
+    // + `translation_placeholders`; older versions expose `summary` and
+    // `description` directly. We fall back through both in HaWsClient.
+    [JsonPropertyName("summary")] public string? Summary { get; init; }
+    [JsonPropertyName("description")] public string? Description { get; init; }
+    [JsonPropertyName("translation_key")] public string? TranslationKey { get; init; }
+    [JsonPropertyName("learn_more_url")] public string? LearnMoreUrl { get; init; }
+    [JsonPropertyName("breaks_in_ha_version")] public string? BreaksInHaVersion { get; init; }
+    [JsonPropertyName("created")] public DateTimeOffset? Created { get; init; }
+    [JsonPropertyName("ignored")] public bool? Ignored { get; init; }
+    [JsonPropertyName("is_fixable")] public bool? IsFixable { get; init; }
+}
+
 [JsonSerializable(typeof(HaStateDto))]
 [JsonSerializable(typeof(List<HaStateDto>))]
 [JsonSerializable(typeof(List<List<HaStateDto>>))]
@@ -144,6 +170,8 @@ internal sealed class HaConfigDto
 [JsonSerializable(typeof(List<HaCalendarEventDto>))]
 [JsonSerializable(typeof(HaAssistDto))]
 [JsonSerializable(typeof(HaConfigDto))]
+[JsonSerializable(typeof(HaRepairsListDto))]
+[JsonSerializable(typeof(HaRepairDto))]
 [JsonSerializable(typeof(List<List<string>>))]
 [JsonSerializable(typeof(string))]
 internal sealed partial class HaJsonContext : JsonSerializerContext;

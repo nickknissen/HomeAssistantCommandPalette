@@ -63,6 +63,8 @@ internal sealed class RecordingHaClient : IHaClient
 
     public HaWeatherForecastResult GetWeatherForecast(string entityId) => throw new NotSupportedException();
 
+    public HaRepairsResult GetRepairs() => new();
+
     public IReadOnlyList<HaHistoryPoint> GetHistory(string entityId, DateTimeOffset since)
     {
         HistoryRequests.Add((entityId, since));

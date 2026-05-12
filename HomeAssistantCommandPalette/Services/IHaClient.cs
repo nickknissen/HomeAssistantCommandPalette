@@ -58,6 +58,13 @@ public interface IHaClient : IDisposable
 
     HaWeatherForecastResult GetWeatherForecast(string entityId);
 
+    /// <summary>
+    /// Snapshot of the HA issue registry (the "Repairs" UI). Returns a
+    /// short-cached list; failures resolve to an empty result so the dock
+    /// band can render a "0 repairs" badge instead of erroring.
+    /// </summary>
+    HaRepairsResult GetRepairs();
+
     IReadOnlyList<HaHistoryPoint> GetHistory(string entityId, DateTimeOffset since);
 
     HaConfigProbe ProbeConfig();

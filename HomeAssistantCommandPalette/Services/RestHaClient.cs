@@ -63,6 +63,12 @@ public sealed partial class RestHaClient : IHaClient
     // Service registry rarely changes — cache for 5 minutes so the script
     // form page doesn't re-fetch on every open.
     private static readonly TimeSpan ServicesTtl = TimeSpan.FromMinutes(5);
+    private const string RepairsCacheKey = "repairs";
+    // Repairs are surfaced by HA integrations relatively rarely (minutes to
+    // hours apart). Cache for 30 seconds: enough to deduplicate the dock
+    // band's count query against the page's full fetch, short enough that
+    // dismissing a repair in HA shows up quickly on the next open.
+    private static readonly TimeSpan RepairsTtl = TimeSpan.FromSeconds(30);
 
     // Jinja template that returns a JSON array of [entity_id, area_name]
     // pairs. HA's `area_name(entity_id)` walks entity → device → area in
@@ -663,6 +669,51 @@ public sealed partial class RestHaClient : IHaClient
         var payload = new ByteArrayContent(bytes);
         payload.Headers.ContentType = new MediaTypeHeaderValue("application/json");
         return payload;
+    }
+
+    public HaRepairsResult GetRepairs()
+    {
+        if (!_settings.IsConfigured)
+        {
+            return new HaRepairsResult
+            {
+                ErrorKind = HaErrorKind.NotConfigured,
+                ErrorTitle = "Home Assistant not configured",
+                ErrorDescription = "Open the extension settings and set the URL and Long-Lived Access Token.",
+            };
+        }
+
+        if (_cache.TryGetValue(RepairsCacheKey, out HaRepairsResult? cached) && cached is not null)
+        {
+            return cached;
+        }
+
+        try
+        {
+            using var cts = new CancellationTokenSource(DefaultTimeout);
+            var issues = _ws.FetchRepairsOnceAsync(cts.Token).GetAwaiter().GetResult();
+            var result = new HaRepairsResult { Issues = issues };
+            _cache.Set(RepairsCacheKey, result, RepairsTtl);
+            return result;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return new HaRepairsResult
+            {
+                ErrorKind = HaErrorKind.Unauthorized,
+                ErrorTitle = "Token rejected",
+                ErrorDescription = "Generate a new Long-Lived Access Token under Profile → Security.",
+            };
+        }
+        catch (Exception ex)
+        {
+            return new HaRepairsResult
+            {
+                ErrorKind = HaErrorKind.NetworkError,
+                ErrorTitle = "Couldn't reach Home Assistant",
+                ErrorDescription = ex.Message,
+            };
+        }
     }
 
     public HaWeatherForecastResult GetWeatherForecast(string entityId)

@@ -83,5 +83,36 @@ internal sealed partial class DemoHaClient : IHaClient
     public HaConfigProbe ProbeConfig()
         => new(true, HaErrorKind.None, null, "demo", "Demo Home", "UTC", "RUNNING", 0);
 
+    public HaRepairsResult GetRepairs()
+    {
+        var now = DateTimeOffset.Now;
+        return new HaRepairsResult
+        {
+            Issues = new[]
+            {
+                new HaRepair(
+                    IssueId: "demo_breaking_change",
+                    Domain: "homeassistant",
+                    Severity: "error",
+                    Summary: "Configuration entry version mismatch",
+                    LearnMoreUrl: "https://www.home-assistant.io/",
+                    BreaksInHaVersion: "2026.1",
+                    Created: now.AddHours(-4),
+                    Ignored: false,
+                    IsFixable: true),
+                new HaRepair(
+                    IssueId: "demo_deprecated_yaml",
+                    Domain: "mqtt",
+                    Severity: "warning",
+                    Summary: "Deprecated YAML configuration",
+                    LearnMoreUrl: null,
+                    BreaksInHaVersion: null,
+                    Created: now.AddDays(-1),
+                    Ignored: false,
+                    IsFixable: false),
+            },
+        };
+    }
+
     public void Dispose() { }
 }
