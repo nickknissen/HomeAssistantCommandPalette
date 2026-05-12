@@ -43,6 +43,8 @@ internal sealed partial class DemoHaClient : IHaClient
 
     public IReadOnlyDictionary<string, object?>? GetServiceFields(string domain, string service) => null;
 
+    public IReadOnlyList<HaAction> GetActions() => System.Array.Empty<HaAction>();
+
     public string? GetCameraSnapshotPath(string entityId) => null;
 
     public string? GetEntityPicturePath(string entityId, string entityPicture) => null;

@@ -42,6 +42,10 @@ internal sealed class RecordingHaClient : IHaClient
     public IReadOnlyDictionary<string, object?>? GetServiceFields(string domain, string service)
         => ServiceFields.TryGetValue($"{domain}.{service}", out var f) ? f : null;
 
+    public List<HaAction> Actions { get; } = new();
+
+    public IReadOnlyList<HaAction> GetActions() => Actions;
+
     public string? GetCameraSnapshotPath(string entityId) => null;
 
     public string? GetEntityPicturePath(string entityId, string entityPicture) => null;

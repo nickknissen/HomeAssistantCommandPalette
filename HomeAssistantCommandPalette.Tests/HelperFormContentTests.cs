@@ -93,6 +93,57 @@ public class HelperFormContentTests
     }
 
     [Fact]
+    public void Action_form_calls_target_service_with_entity_id_and_fields()
+    {
+        var client = new RecordingHaClient();
+        var fields = new Dictionary<string, object?>
+        {
+            ["brightness"] = new Dictionary<string, object?>
+            {
+                ["name"] = "Brightness",
+                ["selector"] = new Dictionary<string, object?>
+                {
+                    ["number"] = new Dictionary<string, object?> { ["min"] = 0.0, ["max"] = 255.0 },
+                },
+            },
+        };
+        var form = new ActionFormContent(client, () => { }, "light", "turn_on", fields, hasTarget: true);
+
+        form.SubmitForm("{\"__entity_id\":\"light.kitchen\",\"brightness\":\"200\"}");
+
+        var call = Assert.Single(client.Calls);
+        Assert.Equal("light", call.Domain);
+        Assert.Equal("turn_on", call.Service);
+        Assert.Equal("light.kitchen", call.EntityId);
+        Assert.Equal(200.0, Assert.IsType<double>(call.ExtraData!["brightness"]));
+    }
+
+    [Fact]
+    public void Action_form_without_target_omits_entity_id()
+    {
+        var client = new RecordingHaClient();
+        var form = new ActionFormContent(client, () => { }, "homeassistant", "restart", new Dictionary<string, object?>(), hasTarget: false);
+
+        form.SubmitForm("{}");
+
+        var call = Assert.Single(client.Calls);
+        Assert.Equal("homeassistant", call.Domain);
+        Assert.Equal("restart", call.Service);
+        Assert.Equal(string.Empty, call.EntityId);
+    }
+
+    [Fact]
+    public void Action_form_requires_entity_id_when_target_set()
+    {
+        var client = new RecordingHaClient();
+        var form = new ActionFormContent(client, () => { }, "light", "turn_off", new Dictionary<string, object?>(), hasTarget: true);
+
+        form.SubmitForm("{\"__entity_id\":\"\"}");
+
+        Assert.Empty(client.Calls);
+    }
+
+    [Fact]
     public void Script_form_rejects_missing_required_field()
     {
         var client = new RecordingHaClient();

@@ -39,6 +39,13 @@ public interface IHaClient : IDisposable
     /// </summary>
     IReadOnlyDictionary<string, object?>? GetServiceFields(string domain, string service);
 
+    /// <summary>
+    /// Full snapshot of HA's services registry — every action across
+    /// every domain. Backs the Run Action page. Cached internally so
+    /// repeat calls are cheap.
+    /// </summary>
+    IReadOnlyList<HaAction> GetActions();
+
     string? GetCameraSnapshotPath(string entityId);
 
     string? GetEntityPicturePath(string entityId, string entityPicture);

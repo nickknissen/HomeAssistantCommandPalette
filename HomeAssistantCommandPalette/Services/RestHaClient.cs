@@ -194,34 +194,42 @@ public sealed partial class RestHaClient : IHaClient
     /// <inheritdoc />
     public IReadOnlyDictionary<string, object?>? GetServiceFields(string domain, string service)
     {
-        if (!_settings.IsConfigured) return null;
-
-        if (!_cache.TryGetValue(ServicesCacheKey, out Dictionary<string, IReadOnlyDictionary<string, object?>>? registry)
-            || registry is null)
-        {
-            registry = FetchServicesRegistry();
-            _cache.Set(ServicesCacheKey, registry, ServicesTtl);
-        }
-
-        return registry.TryGetValue($"{domain}.{service}", out var fields) ? fields : null;
+        var action = GetActionsCached().FirstOrDefault(a =>
+            string.Equals(a.Domain, domain, StringComparison.Ordinal)
+            && string.Equals(a.Service, service, StringComparison.Ordinal));
+        return action is { Fields.Count: > 0 } ? action.Fields : null;
     }
 
-    // GET /api/services returns [{ "domain": "...", "services": { "name": { "fields": {...} } } }, ...].
-    // We flatten to a "{domain}.{service}" → fields map for O(1) lookup.
-    private Dictionary<string, IReadOnlyDictionary<string, object?>> FetchServicesRegistry()
+    /// <inheritdoc />
+    public IReadOnlyList<HaAction> GetActions() => GetActionsCached();
+
+    private IReadOnlyList<HaAction> GetActionsCached()
     {
-        var map = new Dictionary<string, IReadOnlyDictionary<string, object?>>(StringComparer.Ordinal);
+        if (!_settings.IsConfigured) return System.Array.Empty<HaAction>();
+
+        if (!_cache.TryGetValue(ServicesCacheKey, out IReadOnlyList<HaAction>? cached) || cached is null)
+        {
+            cached = FetchServicesRegistry();
+            _cache.Set(ServicesCacheKey, cached, ServicesTtl);
+        }
+        return cached;
+    }
+
+    // GET /api/services returns [{ "domain": "...", "services": { "<name>": { "name", "description", "fields", "target" } } }, ...].
+    private IReadOnlyList<HaAction> FetchServicesRegistry()
+    {
+        var list = new List<HaAction>();
         try
         {
             var client = GetClient();
             var url = $"{_settings.Url}/api/services";
             using var cts = new CancellationTokenSource(DefaultTimeout);
             var response = client.GetAsync(url, cts.Token).GetAwaiter().GetResult();
-            if (!response.IsSuccessStatusCode) return map;
+            if (!response.IsSuccessStatusCode) return list;
 
             var stream = response.Content.ReadAsStream(cts.Token);
             using var doc = JsonDocument.Parse(stream);
-            if (doc.RootElement.ValueKind != JsonValueKind.Array) return map;
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return list;
 
             foreach (var domainElement in doc.RootElement.EnumerateArray())
             {
@@ -231,22 +239,41 @@ public sealed partial class RestHaClient : IHaClient
                 foreach (var service in servicesNode.EnumerateObject())
                 {
                     if (service.Value.ValueKind != JsonValueKind.Object) continue;
-                    if (!service.Value.TryGetProperty("fields", out var fieldsNode) || fieldsNode.ValueKind != JsonValueKind.Object) continue;
-                    if (HaEntityMapper.ToObject(fieldsNode) is IReadOnlyDictionary<string, object?> fields && fields.Count > 0)
-                    {
-                        map[$"{domain}.{service.Name}"] = fields;
-                    }
+
+                    var name = TryGetString(service.Value, "name") ?? Humanize(service.Name);
+                    var description = TryGetString(service.Value, "description") ?? string.Empty;
+
+                    var fields = (service.Value.TryGetProperty("fields", out var fieldsNode)
+                            && fieldsNode.ValueKind == JsonValueKind.Object
+                            && HaEntityMapper.ToObject(fieldsNode) is IReadOnlyDictionary<string, object?> f)
+                        ? f
+                        : (IReadOnlyDictionary<string, object?>)new Dictionary<string, object?>();
+
+                    var hasTarget = service.Value.TryGetProperty("target", out var targetNode)
+                        && targetNode.ValueKind == JsonValueKind.Object;
+
+                    list.Add(new HaAction(domain, service.Name, name, description, fields, hasTarget));
                 }
             }
         }
         catch
         {
-            // Swallow — the script form will fall back to the no-fields
-            // (one-tap) path. Surfacing this in Connection Check would be
-            // nicer but isn't blocking.
+            // Swallow — UI surfaces empty list. Visible in Connection
+            // Check would be nicer but isn't blocking for the Run Action
+            // page.
         }
-        return map;
+        return list;
     }
+
+    private static string? TryGetString(JsonElement el, string prop)
+        => el.TryGetProperty(prop, out var p) && p.ValueKind == JsonValueKind.String
+            ? p.GetString()
+            : null;
+
+    private static string Humanize(string serviceName)
+        => string.IsNullOrEmpty(serviceName)
+            ? serviceName
+            : char.ToUpperInvariant(serviceName[0]) + serviceName[1..].Replace('_', ' ');
 
     /// <summary>
     /// Fetches the latest snapshot from <c>/api/camera_proxy/{entity_id}</c>
@@ -803,12 +830,17 @@ public sealed partial class RestHaClient : IHaClient
         using (var writer = new Utf8JsonWriter(stream))
         {
             writer.WriteStartObject();
-            writer.WriteString("entity_id", entityId);
+            // Run Action page can hit actions that take no target — skip
+            // entity_id when blank so HA doesn't reject the call.
+            if (!string.IsNullOrEmpty(entityId))
+            {
+                writer.WriteString("entity_id", entityId);
+            }
             if (extraData is not null)
             {
                 foreach (var kv in extraData)
                 {
-                    if (string.Equals(kv.Key, "entity_id", StringComparison.Ordinal)) continue;
+                    if (string.Equals(kv.Key, "entity_id", StringComparison.Ordinal) && !string.IsNullOrEmpty(entityId)) continue;
                     WriteJsonValue(writer, kv.Key, kv.Value);
                 }
             }

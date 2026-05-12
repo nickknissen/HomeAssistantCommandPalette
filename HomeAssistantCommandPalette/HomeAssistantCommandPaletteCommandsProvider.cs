@@ -145,6 +145,13 @@ public partial class HomeAssistantCommandPaletteCommandsProvider : CommandProvid
             Icon = Icons.App,
         });
 
+        commands.Add(new CommandItem(new RunActionPage(_settings, _apiClient))
+        {
+            Title = "Run Action",
+            Subtitle = "Home Assistant",
+            Icon = Icons.App,
+        });
+
         commands.Add(new CommandItem(new ConnectionCheckPage(_settings, _apiClient))
         {
             Title = "Connection Check",
