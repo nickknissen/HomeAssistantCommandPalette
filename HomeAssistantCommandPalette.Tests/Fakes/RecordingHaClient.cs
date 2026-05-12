@@ -32,6 +32,16 @@ internal sealed class RecordingHaClient : IHaClient
 
     public HaQueryResult GetStates() => throw new NotSupportedException();
 
+    /// <summary>
+    /// Per-service `fields` metadata returned by <see cref="GetServiceFields"/>.
+    /// Tests stuff this with the script's field map to exercise the form
+    /// path without an HA instance.
+    /// </summary>
+    public Dictionary<string, IReadOnlyDictionary<string, object?>> ServiceFields { get; } = new(StringComparer.Ordinal);
+
+    public IReadOnlyDictionary<string, object?>? GetServiceFields(string domain, string service)
+        => ServiceFields.TryGetValue($"{domain}.{service}", out var f) ? f : null;
+
     public string? GetCameraSnapshotPath(string entityId) => null;
 
     public string? GetEntityPicturePath(string entityId, string entityPicture) => null;

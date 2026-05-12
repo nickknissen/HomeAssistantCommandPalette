@@ -58,6 +58,57 @@ public class HelperFormContentTests
     }
 
     [Fact]
+    public void Script_form_calls_object_id_service_with_typed_fields()
+    {
+        var client = new RecordingHaClient();
+        var entity = TestEntities.Make("script.goodnight", "off");
+        var fields = new Dictionary<string, object?>
+        {
+            ["temperature"] = new Dictionary<string, object?>
+            {
+                ["name"] = "Temperature",
+                ["required"] = true,
+                ["selector"] = new Dictionary<string, object?>
+                {
+                    ["number"] = new Dictionary<string, object?> { ["min"] = 15.0, ["max"] = 30.0 },
+                },
+            },
+            ["enable"] = new Dictionary<string, object?>
+            {
+                ["selector"] = new Dictionary<string, object?> { ["boolean"] = new Dictionary<string, object?>() },
+            },
+            ["note"] = new Dictionary<string, object?>(),
+        };
+        var form = new ScriptFormContent(entity, client, () => { }, fields);
+
+        form.SubmitForm("{\"temperature\":\"22.5\",\"enable\":\"true\",\"note\":\"hello\"}");
+
+        var call = Assert.Single(client.Calls);
+        Assert.Equal("script", call.Domain);
+        Assert.Equal("goodnight", call.Service);
+        Assert.Equal("script.goodnight", call.EntityId);
+        Assert.Equal(22.5, Assert.IsType<double>(call.ExtraData!["temperature"]));
+        Assert.True(Assert.IsType<bool>(call.ExtraData!["enable"]));
+        Assert.Equal("hello", call.ExtraData!["note"]);
+    }
+
+    [Fact]
+    public void Script_form_rejects_missing_required_field()
+    {
+        var client = new RecordingHaClient();
+        var entity = TestEntities.Make("script.example", "off");
+        var fields = new Dictionary<string, object?>
+        {
+            ["name"] = new Dictionary<string, object?> { ["required"] = true },
+        };
+        var form = new ScriptFormContent(entity, client, () => { }, fields);
+
+        form.SubmitForm("{\"name\":\"\"}");
+
+        Assert.Empty(client.Calls);
+    }
+
+    [Fact]
     public void Input_datetime_form_calls_set_datetime_with_date_and_time()
     {
         var client = new RecordingHaClient();

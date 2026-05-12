@@ -30,6 +30,15 @@ public interface IHaClient : IDisposable
         IReadOnlyDictionary<string, object?>? extraData,
         out string errorMessage);
 
+    /// <summary>
+    /// Returns the `fields` metadata for the service <c>{domain}.{service}</c>
+    /// from HA's services registry (<c>/api/services</c>), or <c>null</c>
+    /// when the service isn't found or has no declared fields. Used to
+    /// drive the script form: HA exposes script field definitions on the
+    /// services registry, not on the entity's state attributes.
+    /// </summary>
+    IReadOnlyDictionary<string, object?>? GetServiceFields(string domain, string service);
+
     string? GetCameraSnapshotPath(string entityId);
 
     string? GetEntityPicturePath(string entityId, string entityPicture);

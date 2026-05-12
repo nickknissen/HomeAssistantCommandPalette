@@ -37,6 +37,7 @@ internal static class HaEntityMapper
         JsonValueKind.False => false,
         JsonValueKind.Null => null,
         JsonValueKind.Array => ParseJsonArray(el),
+        JsonValueKind.Object => ParseJsonObject(el),
         _ => el.GetRawText(),
     };
 
@@ -48,6 +49,16 @@ internal static class HaEntityMapper
             items.Add(ToObject(item));
         }
         return items;
+    }
+
+    private static Dictionary<string, object?> ParseJsonObject(JsonElement el)
+    {
+        var dict = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var prop in el.EnumerateObject())
+        {
+            dict[prop.Name] = ToObject(prop.Value);
+        }
+        return dict;
     }
 
     public static int CompareByFriendlyName(HaEntity a, HaEntity b)

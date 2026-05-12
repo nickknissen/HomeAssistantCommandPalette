@@ -59,6 +59,10 @@ public sealed partial class RestHaClient : IHaClient
     // the next CmdPal restart.
     private static readonly TimeSpan EntityPictureTtl = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan HistoryTtl = TimeSpan.FromSeconds(60);
+    private const string ServicesCacheKey = "services";
+    // Service registry rarely changes — cache for 5 minutes so the script
+    // form page doesn't re-fetch on every open.
+    private static readonly TimeSpan ServicesTtl = TimeSpan.FromMinutes(5);
 
     // Jinja template that returns a JSON array of [entity_id, area_name]
     // pairs. HA's `area_name(entity_id)` walks entity → device → area in
@@ -186,6 +190,63 @@ public sealed partial class RestHaClient : IHaClient
 
     public bool TryCallService(string domain, string service, string entityId, out string errorMessage)
         => TryCallService(domain, service, entityId, extraData: null, out errorMessage);
+
+    /// <inheritdoc />
+    public IReadOnlyDictionary<string, object?>? GetServiceFields(string domain, string service)
+    {
+        if (!_settings.IsConfigured) return null;
+
+        if (!_cache.TryGetValue(ServicesCacheKey, out Dictionary<string, IReadOnlyDictionary<string, object?>>? registry)
+            || registry is null)
+        {
+            registry = FetchServicesRegistry();
+            _cache.Set(ServicesCacheKey, registry, ServicesTtl);
+        }
+
+        return registry.TryGetValue($"{domain}.{service}", out var fields) ? fields : null;
+    }
+
+    // GET /api/services returns [{ "domain": "...", "services": { "name": { "fields": {...} } } }, ...].
+    // We flatten to a "{domain}.{service}" → fields map for O(1) lookup.
+    private Dictionary<string, IReadOnlyDictionary<string, object?>> FetchServicesRegistry()
+    {
+        var map = new Dictionary<string, IReadOnlyDictionary<string, object?>>(StringComparer.Ordinal);
+        try
+        {
+            var client = GetClient();
+            var url = $"{_settings.Url}/api/services";
+            using var cts = new CancellationTokenSource(DefaultTimeout);
+            var response = client.GetAsync(url, cts.Token).GetAwaiter().GetResult();
+            if (!response.IsSuccessStatusCode) return map;
+
+            var stream = response.Content.ReadAsStream(cts.Token);
+            using var doc = JsonDocument.Parse(stream);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return map;
+
+            foreach (var domainElement in doc.RootElement.EnumerateArray())
+            {
+                if (!domainElement.TryGetProperty("domain", out var domainNode) || domainNode.ValueKind != JsonValueKind.String) continue;
+                if (!domainElement.TryGetProperty("services", out var servicesNode) || servicesNode.ValueKind != JsonValueKind.Object) continue;
+                var domain = domainNode.GetString()!;
+                foreach (var service in servicesNode.EnumerateObject())
+                {
+                    if (service.Value.ValueKind != JsonValueKind.Object) continue;
+                    if (!service.Value.TryGetProperty("fields", out var fieldsNode) || fieldsNode.ValueKind != JsonValueKind.Object) continue;
+                    if (HaEntityMapper.ToObject(fieldsNode) is IReadOnlyDictionary<string, object?> fields && fields.Count > 0)
+                    {
+                        map[$"{domain}.{service.Name}"] = fields;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Swallow — the script form will fall back to the no-fields
+            // (one-tap) path. Surfacing this in Connection Check would be
+            // nicer but isn't blocking.
+        }
+        return map;
+    }
 
     /// <summary>
     /// Fetches the latest snapshot from <c>/api/camera_proxy/{entity_id}</c>

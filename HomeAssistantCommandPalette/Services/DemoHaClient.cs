@@ -41,6 +41,8 @@ internal sealed partial class DemoHaClient : IHaClient
         return true;
     }
 
+    public IReadOnlyDictionary<string, object?>? GetServiceFields(string domain, string service) => null;
+
     public string? GetCameraSnapshotPath(string entityId) => null;
 
     public string? GetEntityPicturePath(string entityId, string entityPicture) => null;

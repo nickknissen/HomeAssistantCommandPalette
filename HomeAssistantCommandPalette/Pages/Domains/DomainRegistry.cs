@@ -23,7 +23,7 @@ public static class DomainRegistry
             ["input_boolean"] = Domains.Toggle("input_boolean"),
             ["group"]         = Domains.Toggle("group"),
             ["scene"]         = Domains.Activate("scene", "turn_on", "Activate"),
-            ["script"]        = Domains.Activate("script", "turn_on", "Run"),
+            ["script"]        = new ScriptBehavior(),
             ["button"]        = Domains.Activate("button", "press", "Press"),
             ["input_button"]  = Domains.Activate("input_button", "press", "Press"),
             ["counter"]       = Domains.Increment("counter"),

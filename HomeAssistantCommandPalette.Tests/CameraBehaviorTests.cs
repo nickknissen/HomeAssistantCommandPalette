@@ -20,6 +20,7 @@ public class CameraBehaviorTests
         public bool TryCallService(string domain, string service, string entityId, out string errorMessage) => throw new NotSupportedException();
         public bool TryCallService(string domain, string service, string entityId, IReadOnlyDictionary<string, object?>? extraData, out string errorMessage) => throw new NotSupportedException();
         public string? GetEntityPicturePath(string entityId, string entityPicture) => null;
+        public IReadOnlyDictionary<string, object?>? GetServiceFields(string domain, string service) => null;
         public HaQueryResult GetStates() => throw new NotSupportedException();
         public HaCalendarsResult GetCalendars() => throw new NotSupportedException();
         public IReadOnlyList<HaCalendarEvent> GetCalendarEvents(HaCalendar calendar, DateTimeOffset start, DateTimeOffset endTime) => throw new NotSupportedException();
