@@ -86,6 +86,12 @@ there to expose another domain.
 - See [Token storage](#token-storage) for the current settings.json vs.
   Windows Credential Manager decision and threat model.
 
+## Privacy
+
+No analytics, no telemetry. The extension only talks to the Home Assistant URL
+you configure. Full policy:
+<https://s-nissen.dk/privacy/homeassistant-command-palette.html>.
+
 ## Roadmap
 
 Open work is tracked in [GitHub Issues](https://github.com/nickknissen/HomeAssistantCommandPalette/issues).
