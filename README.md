@@ -3,6 +3,8 @@
 A PowerToys Command Palette extension that lets you search and control your
 Home Assistant entities from CmdPal.
 
+![All Entities page showing lights, switches, and a media player with state badges and a detail pane](docs/screenshots/all-entities.png)
+
 > Inspired by the [Raycast Home Assistant extension](https://github.com/raycast/extensions/tree/main/extensions/homeassistant)
 > by tonka3000.
 
