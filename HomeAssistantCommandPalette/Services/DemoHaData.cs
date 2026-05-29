@@ -27,6 +27,9 @@ internal static class DemoHaData
             Entity("automation.morning",           "on",        "Morning Automation"),
             Entity("sensor.outside_temperature",   "12.4",      "Outside Temperature", "°C"),
             Entity("binary_sensor.front_door",     "off",       "Front Door"),
+            Entity("camera.front_door",            "streaming", "Front Door Camera"),
+            Entity("camera.living_room",           "idle",      "Living Room Camera"),
+            Entity("camera.backyard",              "recording", "Backyard Camera"),
         },
     };
 

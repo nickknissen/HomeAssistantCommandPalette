@@ -100,9 +100,15 @@ public sealed class HaSettings : JsonSettingsManager
         Settings.SettingsChanged += (_, _) => SaveSettings();
     }
 
+#if DEMO_MODE
+    public string Url => "https://www.home-assistant.io";
+
+    public string Token => "demo_long_lived_access_token_placeholder_for_screenshots";
+#else
     public string Url => (_urlSetting.Value ?? string.Empty).Trim().TrimEnd('/');
 
     public string Token => (_tokenSetting.Value ?? string.Empty).Trim();
+#endif
 
     public bool IgnoreCertificateErrors => _ignoreCertSetting.Value;
 
