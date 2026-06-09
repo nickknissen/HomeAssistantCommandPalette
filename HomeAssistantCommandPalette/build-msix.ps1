@@ -12,11 +12,8 @@
   Steps per platform:
     1. dotnet publish with WindowsPackageType=MSIX
     2. Stage publish output, patch AppxManifest (Version, ProcessorArchitecture, Publisher)
-    3. Override Microsoft.CommandPalette.Extensions.dll/winmd with the
-       vendored copy from tools/cmdpal-sdk (NuGet WinRT IIDs don't match
-       what CmdPal expects)
-    4. makeappx pack -> .msix
-    5. (optional) signtool sign with PFX cert
+    3. makeappx pack -> .msix
+    4. (optional) signtool sign with PFX cert
 #>
 param(
     [Parameter(Mandatory = $true)]
@@ -50,9 +47,7 @@ $ErrorActionPreference = "Stop"
 
 $ExtensionName = "HomeAssistantCommandPalette"
 $ProjectDir    = $PSScriptRoot
-$RepoRoot      = Split-Path -Parent $ProjectDir
 $ProjectFile   = Join-Path $ProjectDir "$ExtensionName.csproj"
-$VendorSdkDir  = Join-Path $RepoRoot "tools\cmdpal-sdk"
 
 if (-not $OutputDir) { $OutputDir = Join-Path $ProjectDir "bin\Release\msix" }
 New-Item -Path $OutputDir -ItemType Directory -Force | Out-Null
@@ -73,13 +68,6 @@ foreach ($t in @($makeappx, $signtool)) {
     if (-not (Test-Path $t)) { throw "Required SDK tool not found: $t" }
 }
 Write-Host "SDK bin:    $($sdkBin.FullName)" -ForegroundColor Yellow
-
-# ---------- Validate vendored SDK ----------
-foreach ($f in @("Microsoft.CommandPalette.Extensions.dll", "Microsoft.CommandPalette.Extensions.winmd")) {
-    if (-not (Test-Path (Join-Path $VendorSdkDir $f))) {
-        throw "Missing vendored SDK file: $f. See tools/cmdpal-sdk/README.md."
-    }
-}
 
 # ---------- Resolve PFX once if provided ----------
 $signingPfx = $null
@@ -149,14 +137,6 @@ try {
 
         Remove-Item (Join-Path $stagingDir "Package.appxmanifest") -ErrorAction SilentlyContinue
 
-        # ---------- 3. Override SDK DLL/winmd with vendored copy ----------
-        # NuGet 0.9.260303001 IIDs don't match CmdPal's internal 0.9.260326002 —
-        # cast to (ICommandProvider) fails silently without this override.
-        Copy-Item (Join-Path $VendorSdkDir "Microsoft.CommandPalette.Extensions.dll") `
-                  (Join-Path $stagingDir "Microsoft.CommandPalette.Extensions.dll") -Force
-        Copy-Item (Join-Path $VendorSdkDir "Microsoft.CommandPalette.Extensions.winmd") `
-                  (Join-Path $stagingDir "Microsoft.CommandPalette.Extensions.winmd") -Force
-
         New-Item -ItemType Directory -Path (Join-Path $stagingDir "Public") -Force | Out-Null
 
         foreach ($strip in @("build-exe.ps1", "setup-template.iss", "build-msix.ps1", "*.pdb", "app.manifest")) {
@@ -166,7 +146,7 @@ try {
         $appPackagesNested = Join-Path $stagingDir "AppPackages"
         if (Test-Path $appPackagesNested) { Remove-Item $appPackagesNested -Recurse -Force }
 
-        # ---------- 4. makeappx pack ----------
+        # ---------- 3. makeappx pack ----------
         $msixName = "${ExtensionName}_${Version}.0_${Platform}.msix"
         $msixPath = Join-Path $OutputDir $msixName
         Remove-Item $msixPath -Force -ErrorAction SilentlyContinue
@@ -174,7 +154,7 @@ try {
         & $makeappx pack /d $stagingDir /p $msixPath /nv /o
         if ($LASTEXITCODE -ne 0) { throw "makeappx pack failed for $Platform (exit $LASTEXITCODE)" }
 
-        # ---------- 5. Optional signing ----------
+        # ---------- 4. Optional signing ----------
         if ($signingPfx) {
             Write-Host "Signing $msixName" -ForegroundColor Yellow
             $signArgs = @('sign', '/fd', 'SHA256', '/f', $signingPfx)
