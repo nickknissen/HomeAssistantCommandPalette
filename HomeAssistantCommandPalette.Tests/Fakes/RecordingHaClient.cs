@@ -30,7 +30,13 @@ internal sealed class RecordingHaClient : IHaClient
         return true;
     }
 
-    public HaQueryResult GetStates() => throw new NotSupportedException();
+    /// <summary>
+    /// Snapshot handed back by <see cref="GetStates"/>. Page-level tests
+    /// fill this; behavior tests leave it empty and never call it.
+    /// </summary>
+    public List<HaEntity> Entities { get; } = new();
+
+    public HaQueryResult GetStates() => new() { Items = Entities };
 
     /// <summary>
     /// Per-service `fields` metadata returned by <see cref="GetServiceFields"/>.
@@ -46,7 +52,17 @@ internal sealed class RecordingHaClient : IHaClient
 
     public IReadOnlyList<HaAction> GetActions() => Actions;
 
-    public string? GetCameraSnapshotPath(string entityId) => null;
+    /// <summary>Entity ids passed to <see cref="GetCameraSnapshotPath"/>, in call order.</summary>
+    public List<string> CameraSnapshotRequests { get; } = new();
+
+    /// <summary>Path handed back by <see cref="GetCameraSnapshotPath"/>; null models a failed fetch.</summary>
+    public string? CameraSnapshotPath { get; set; }
+
+    public string? GetCameraSnapshotPath(string entityId)
+    {
+        CameraSnapshotRequests.Add(entityId);
+        return CameraSnapshotPath;
+    }
 
     public string? GetEntityPicturePath(string entityId, string entityPicture) => null;
 
