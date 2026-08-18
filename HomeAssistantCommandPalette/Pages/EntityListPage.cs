@@ -29,9 +29,16 @@ namespace HomeAssistantCommandPalette.Pages;
 // array) and CmdPal's ListPage has no disposal hook, so the Timer field
 // never needs releasing — it dies with the process.
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Design", "CA1001:Types that own disposable fields should be disposable", Justification = "Page lifetime equals process lifetime; ListPage has no Dispose hook.")]
-internal sealed partial class EntityListPage : ListPage
+internal sealed partial class EntityListPage : DynamicListPage
 {
     private const string EntityCommandIdPrefix = "ha.entity:";
+
+    // Every item handed to CmdPal costs ~19 cross-process property reads
+    // plus a PropChanged subscription, and a fresh navigation starts with
+    // an empty ViewModel cache — so the hand-off, not the data, is what
+    // makes a 1000-entity page slow to open. Give the host a page at a
+    // time and let it ask for more by scrolling.
+    private const int PageSize = 100;
 
     private readonly HaSettings _settings;
     private readonly IHaClient _client;
@@ -41,14 +48,42 @@ internal sealed partial class EntityListPage : ListPage
     private readonly bool _sortByNumericStateAscending;
     private readonly bool _openAttributesPage;
     private readonly bool _onlyOnState;
-    private readonly ConcurrentDictionary<string, ListItem> _pinnedItems = new(StringComparer.Ordinal);
+    private readonly bool _isCameraGridPage;
+    private readonly ConcurrentDictionary<string, byte> _pinnedIds = new(StringComparer.Ordinal);
+
+    // One ListItem per entity, reused across renders. CmdPal caches its
+    // ViewModels keyed on item *reference identity*, so handing back the
+    // same instances means an unchanged row costs nothing to re-render —
+    // and we stop minting a fresh set of COM wrappers on every refresh.
+    private readonly ConcurrentDictionary<string, CachedItem> _itemCache = new(StringComparer.Ordinal);
+
+    private sealed record CachedItem(HaEntity Source, LazyDetailsListItem Item);
+
+    // How many PageSize chunks the host has asked for via LoadMore.
+    private int _loadedChunks = 1;
+
+    // Frozen "recently changed first" ordering for the unfiltered page.
+    // Re-sorting on every state push would make rows jump around while
+    // the user is reading them, so the order is held until the entity set
+    // changes, the search box is cleared, or it simply goes stale.
+    private static readonly TimeSpan RecencyOrderMaxAge = TimeSpan.FromSeconds(60);
+    private List<string>? _recencyOrder;
+    private long _recencyOrderStampUtcTicks;
 
     // HA can burst many state_changed events in a short window (e.g. an
     // automation toggling 20 lights). Coalesce into one RaiseItemsChanged
     // call per quiet window so we don't thrash CmdPal's render path.
     private static readonly TimeSpan WsRefreshDebounce = TimeSpan.FromMilliseconds(250);
+    // A quiet window never arrives on a chatty instance — every event
+    // would push the debounce out again and the list would go stale
+    // (or, worse, only refresh once the user stops interacting). Cap how
+    // long a pending refresh can be postponed; past the cap the armed
+    // tick stands, so a busy instance settles at roughly one rebuild per
+    // second instead of one per event.
+    private static readonly TimeSpan WsRefreshMaxDelay = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan CameraAutoRefreshIdleGrace = TimeSpan.FromMilliseconds(500);
     private readonly System.Threading.Timer _wsRefreshTimer;
+    private long _refreshPendingSinceUtcTicks;
     private readonly System.Threading.Timer? _cameraRefreshTimer;
     private readonly bool _autoRefreshCameras;
     private readonly TimeSpan _cameraAutoRefreshInterval;
@@ -76,7 +111,8 @@ internal sealed partial class EntityListPage : ListPage
         _openAttributesPage = openAttributesPage;
         _onlyOnState = onlyOnState;
         _cameraAutoRefreshInterval = CameraAutoRefreshIntervalFromSettings(_settings);
-        _autoRefreshCameras = IsCameraAutoRefreshPage(_domains, _deviceClasses) && _cameraAutoRefreshInterval > TimeSpan.Zero;
+        _isCameraGridPage = IsCameraAutoRefreshPage(_domains, _deviceClasses);
+        _autoRefreshCameras = _isCameraGridPage && _cameraAutoRefreshInterval > TimeSpan.Zero;
 
         Icon = icon ?? Icons.App;
         Title = title;
@@ -85,7 +121,7 @@ internal sealed partial class EntityListPage : ListPage
         ShowDetails = true;
         PlaceholderText = $"Search {title.ToLowerInvariant()}";
 
-        if (IsCameraAutoRefreshPage(_domains, _deviceClasses))
+        if (_isCameraGridPage)
         {
             ShowDetails = false;
             GridProperties = new GalleryGridLayout
@@ -97,6 +133,7 @@ internal sealed partial class EntityListPage : ListPage
 
         _wsRefreshTimer = new System.Threading.Timer(_ =>
         {
+            System.Threading.Interlocked.Exchange(ref _refreshPendingSinceUtcTicks, 0);
             try { RaiseItemsChanged(0); } catch { /* page may be torn down */ }
         }, state: null, dueTime: System.Threading.Timeout.Infinite, period: System.Threading.Timeout.Infinite);
 
@@ -126,6 +163,20 @@ internal sealed partial class EntityListPage : ListPage
         {
             return;
         }
+        ScheduleRefresh();
+    }
+
+    private void ScheduleRefresh()
+    {
+        var now = DateTime.UtcNow.Ticks;
+        var pendingSince = System.Threading.Interlocked.CompareExchange(ref _refreshPendingSinceUtcTicks, now, 0);
+        if (pendingSince != 0 && new TimeSpan(now - pendingSince) >= WsRefreshMaxDelay)
+        {
+            // A refresh has been waiting longer than the cap — leave the
+            // already-armed tick alone rather than postponing it again.
+            return;
+        }
+
         _wsRefreshTimer.Change(WsRefreshDebounce, System.Threading.Timeout.InfiniteTimeSpan);
     }
 
@@ -144,6 +195,30 @@ internal sealed partial class EntityListPage : ListPage
         return _domains.Contains(domain);
     }
 
+    /// <summary>
+    /// The search box drives us, not CmdPal: we own the filtering so the
+    /// host only ever receives the matches, not all 1000 entities.
+    /// </summary>
+    public override void UpdateSearchText(string oldSearch, string newSearch)
+    {
+        // A new query starts back at the first page, and clearing the box
+        // re-freshens the "recently changed" ordering.
+        _loadedChunks = 1;
+        if (string.IsNullOrWhiteSpace(newSearch))
+        {
+            _recencyOrder = null;
+        }
+        RaiseItemsChanged(0);
+    }
+
+    public override void LoadMore()
+    {
+        _loadedChunks++;
+        // -2 tells CmdPal this is an incremental refresh so it keeps the
+        // user's selection instead of snapping back to the first row.
+        RaiseItemsChanged(-2);
+    }
+
     public override IListItem[] GetItems()
     {
         TouchCameraAutoRefresh();
@@ -151,6 +226,7 @@ internal sealed partial class EntityListPage : ListPage
         var result = _client.GetStates();
         if (result.HasError)
         {
+            HasMoreItems = false;
             // For configuration errors, make the error item itself navigate
             // to the settings page so the user can fix it in one click.
             var openSettings = (ICommand)_settings.Settings.SettingsPage;
@@ -206,7 +282,168 @@ internal sealed partial class EntityListPage : ListPage
                 System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : double.PositiveInfinity);
         }
 
-        return items.Select(CreateItem).ToArray();
+        var query = SearchText?.Trim() ?? string.Empty;
+        var candidates = items.ToList();
+
+        // Unfiltered All Entities: newest activity first, so the page
+        // answers "what just happened" instead of opening on whatever
+        // sorts first alphabetically. Domain pages keep their own order.
+        if (query.Length == 0 && _domains is null && !_sortByNumericStateAscending)
+        {
+            candidates = ApplyFrozenRecencyOrder(candidates);
+        }
+
+        PruneItemCache(candidates);
+
+        IEnumerable<HaEntity> ordered = candidates;
+        if (query.Length > 0)
+        {
+            ordered = ListHelpers.FilterList(candidates, query, ScoreEntity);
+        }
+
+        // Score and page over entities, then build items only for the rows
+        // actually handed over — a match that never reaches the host costs
+        // nothing.
+        var limit = Math.Max(1, _loadedChunks) * PageSize;
+        var page = ordered.Take(limit + 1).ToList();
+        HasMoreItems = page.Count > limit;
+        if (HasMoreItems)
+        {
+            page.RemoveAt(page.Count - 1);
+        }
+
+        return page.Select(GetOrUpdateItem).ToArray<IListItem>();
+    }
+
+    /// <summary>
+    /// Ranks an entity against the query. Scoring is ours rather than
+    /// <c>ListHelpers.ScoreListItem</c>'s: that one routes through the
+    /// SDK's fuzzy matcher, which needs a pinyin assembly the extension
+    /// doesn't ship and would throw on the first keystroke. Doing it here
+    /// also lets a search hit <c>entity_id</c> and area, which is what
+    /// people reach for when wiring automations.
+    /// </summary>
+    internal static int ScoreEntity(string query, HaEntity entity)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return 1;
+        }
+
+        var total = 0;
+        foreach (var token in query.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            // Every token has to land somewhere — "kitchen lamp" should not
+            // match a bedroom lamp just because "lamp" hit.
+            var score = ScoreToken(token, entity);
+            if (score == 0)
+            {
+                return 0;
+            }
+            total += score;
+        }
+        return total;
+    }
+
+    private static int ScoreToken(string token, HaEntity entity)
+    {
+        var name = entity.FriendlyName ?? string.Empty;
+
+        if (string.Equals(name, token, StringComparison.OrdinalIgnoreCase)) return 100;
+
+        var nameIndex = name.IndexOf(token, StringComparison.OrdinalIgnoreCase);
+        if (nameIndex == 0) return 80;
+        if (nameIndex > 0) return IsWordStart(name, nameIndex) ? 60 : 40;
+
+        if (entity.EntityId.Contains(token, StringComparison.OrdinalIgnoreCase)) return 30;
+        if (entity.AreaName?.Contains(token, StringComparison.OrdinalIgnoreCase) == true) return 20;
+
+        return 0;
+    }
+
+    private static bool IsWordStart(string text, int index)
+        => index > 0 && text[index - 1] is ' ' or '_' or '-' or '.';
+
+    /// <summary>
+    /// Returns the cached item for an entity, updating it in place when
+    /// the entity actually changed. Identity is the point: the same
+    /// instance across renders lets CmdPal reuse its ViewModel instead of
+    /// re-reading every property over COM.
+    /// </summary>
+    private LazyDetailsListItem GetOrUpdateItem(HaEntity entity)
+    {
+        if (_itemCache.TryGetValue(entity.EntityId, out var cached))
+        {
+            if (!HasRenderableChange(cached.Source, entity))
+            {
+                return cached.Item;
+            }
+
+            CopyItemProperties(CreateItem(entity), cached.Item);
+            _itemCache[entity.EntityId] = cached with { Source = entity };
+            return cached.Item;
+        }
+
+        var item = CreateItem(entity);
+        _itemCache[entity.EntityId] = new CachedItem(entity, item);
+        return item;
+    }
+
+    // last_updated moves whenever HA touches the state *or* any attribute,
+    // so it covers icon / tag / details changes without walking the
+    // attribute dictionary. The rest are what the row itself renders.
+    private static bool HasRenderableChange(HaEntity previous, HaEntity current)
+        => !string.Equals(previous.State, current.State, StringComparison.Ordinal)
+            || previous.LastUpdated != current.LastUpdated
+            || !string.Equals(previous.FriendlyName, current.FriendlyName, StringComparison.Ordinal)
+            || !string.Equals(previous.AreaName, current.AreaName, StringComparison.Ordinal);
+
+    private void PruneItemCache(List<HaEntity> candidates)
+    {
+        // Entities disappear when an integration is removed or renamed.
+        // Only pay for the sweep when the cache has outgrown the snapshot.
+        if (_itemCache.Count <= candidates.Count)
+        {
+            return;
+        }
+
+        var live = new HashSet<string>(candidates.Select(e => e.EntityId), StringComparer.Ordinal);
+        foreach (var key in _itemCache.Keys)
+        {
+            if (!live.Contains(key) && !_pinnedIds.ContainsKey(key))
+            {
+                _itemCache.TryRemove(key, out _);
+            }
+        }
+    }
+
+    private List<HaEntity> ApplyFrozenRecencyOrder(List<HaEntity> candidates)
+    {
+        var order = _recencyOrder;
+        var stale = order is null
+            || order.Count != candidates.Count
+            || DateTime.UtcNow - new DateTime(System.Threading.Interlocked.Read(ref _recencyOrderStampUtcTicks), DateTimeKind.Utc) > RecencyOrderMaxAge
+            || !new HashSet<string>(candidates.Select(e => e.EntityId), StringComparer.Ordinal).SetEquals(order);
+
+        if (stale)
+        {
+            order = candidates
+                .OrderByDescending(e => e.LastChanged ?? DateTimeOffset.MinValue)
+                .Select(e => e.EntityId)
+                .ToList();
+            _recencyOrder = order;
+            System.Threading.Interlocked.Exchange(ref _recencyOrderStampUtcTicks, DateTime.UtcNow.Ticks);
+        }
+
+        var rank = new Dictionary<string, int>(order!.Count, StringComparer.Ordinal);
+        for (var i = 0; i < order.Count; i++)
+        {
+            rank[order[i]] = i;
+        }
+
+        return candidates
+            .OrderBy(e => rank.TryGetValue(e.EntityId, out var r) ? r : int.MaxValue)
+            .ToList();
     }
 
     internal ListItem? TryCreateItemForCommandId(string id)
@@ -228,9 +465,10 @@ internal sealed partial class EntityListPage : ListPage
             return null;
         }
 
-        var item = CreateItem(entity);
-        _pinnedItems[entityId] = item;
-        return item;
+        // Shares the page's item cache, so a pinned dock row and the same
+        // row in the list are one object that updates once.
+        _pinnedIds[entityId] = 0;
+        return GetOrUpdateItem(entity);
     }
 
     internal static string EntityCommandId(string entityId) => EntityCommandIdPrefix + entityId;
@@ -301,7 +539,7 @@ internal sealed partial class EntityListPage : ListPage
         try { RaiseItemsChanged(0); } catch { /* page may have been closed */ }
     }
 
-    private ListItem CreateItem(HaEntity entity)
+    private LazyDetailsListItem CreateItem(HaEntity entity)
     {
         var behavior = DomainRegistry.For(entity.Domain, entity.EntityId);
         var ctx = new DomainCtx(entity, _client, _settings, OnServiceCallSucceeded);
@@ -310,10 +548,6 @@ internal sealed partial class EntityListPage : ListPage
             ? new EntityAttributesPage(entity)
             : behavior.BuildPrimary(in ctx);
         SetCommandId(primary, EntityCommandId(entity.EntityId));
-
-        var rows = new List<IDetailsElement> { DomainHelpers.Row("State", DomainHelpers.FormatStateWithUnit(entity)) };
-        behavior.AddDetailRows(in ctx, rows);
-        DomainHelpers.AppendCommonRows(entity, rows);
 
         var ctxItems = new List<IContextItem>(8);
         behavior.AddContextItems(in ctx, ctxItems);
@@ -329,32 +563,54 @@ internal sealed partial class EntityListPage : ListPage
             Name = "Copy entity ID",
         }));
 
-        var details = new Details
-        {
-            Title = entity.FriendlyName,
-            Metadata = rows.ToArray(),
-        };
-        // HeroImage: only behaviors that need one (e.g. camera) override
-        // BuildHeroImage; the toolkit type rejects null assignment. Camera
-        // grid cards also use the snapshot as the item icon/thumbnail.
-        var hero = behavior.BuildHeroImage(in ctx);
-        if (hero is not null) details.HeroImage = hero;
-        var itemIcon = hero ?? _iconResolver.Resolve(entity);
+        // Camera grid cards use the snapshot as the card thumbnail, so
+        // that page — and only that page — has to fetch hero images while
+        // building the list. Everywhere else the hero is details-only and
+        // rides the deferred build, which keeps a camera on a mixed page
+        // from costing an HTTP round trip per render.
+        var eagerHero = _isCameraGridPage ? behavior.BuildHeroImage(in ctx) : null;
+        var itemIcon = eagerHero ?? _iconResolver.Resolve(entity);
 
-        return new ListItem(primary)
+        return new LazyDetailsListItem(primary, () => BuildDetails(behavior, ctx, eagerHero))
         {
             Title = entity.FriendlyName,
             Subtitle = BuildSubtitle(entity),
             Tags = BuildTags(entity),
             Icon = itemIcon,
             MoreCommands = ctxItems.ToArray(),
-            Details = details,
         };
+    }
+
+    /// <summary>
+    /// Builds one entity's details pane. Runs on first read of
+    /// <see cref="LazyDetailsListItem.Details"/> — i.e. when the row is
+    /// selected — because the domain hooks it calls may hit Home
+    /// Assistant (sensor history, camera snapshot).
+    /// </summary>
+    private static Details BuildDetails(DomainBehavior behavior, DomainCtx ctx, IconInfo? eagerHero)
+    {
+        var entity = ctx.Entity;
+
+        var rows = new List<IDetailsElement> { DomainHelpers.Row("State", DomainHelpers.FormatStateWithUnit(entity)) };
+        behavior.AddDetailRows(in ctx, rows);
+        DomainHelpers.AppendCommonRows(entity, rows);
+
+        var details = new Details
+        {
+            Title = entity.FriendlyName,
+            Metadata = rows.ToArray(),
+        };
+
+        // HeroImage: only behaviors that need one (e.g. camera) override
+        // BuildHeroImage; the toolkit type rejects null assignment.
+        var hero = eagerHero ?? behavior.BuildHeroImage(in ctx);
+        if (hero is not null) details.HeroImage = hero;
+        return details;
     }
 
     private void RefreshPinnedItems(string? changedEntityId)
     {
-        if (_pinnedItems.IsEmpty)
+        if (_pinnedIds.IsEmpty)
         {
             return;
         }
@@ -371,7 +627,7 @@ internal sealed partial class EntityListPage : ListPage
             return;
         }
 
-        foreach (var entityId in _pinnedItems.Keys)
+        foreach (var entityId in _pinnedIds.Keys)
         {
             RefreshPinnedItem(entityId, result.Items);
         }
@@ -379,7 +635,7 @@ internal sealed partial class EntityListPage : ListPage
 
     private void RefreshPinnedItem(string entityId, IReadOnlyCollection<HaEntity> snapshot)
     {
-        if (!_pinnedItems.TryGetValue(entityId, out var existing))
+        if (!_pinnedIds.ContainsKey(entityId) || !_itemCache.ContainsKey(entityId))
         {
             return;
         }
@@ -390,16 +646,31 @@ internal sealed partial class EntityListPage : ListPage
             return;
         }
 
-        CopyItemProperties(CreateItem(entity), existing);
+        // Updates the cached instance in place — the dock is watching this
+        // very object's PropChanged.
+        GetOrUpdateItem(entity);
     }
 
-    private static void CopyItemProperties(ListItem source, ListItem target)
+    private static void CopyItemProperties(LazyDetailsListItem source, LazyDetailsListItem target)
     {
-        target.Title = source.Title;
-        target.Subtitle = source.Subtitle;
+        // Each assignment raises PropChanged, which makes CmdPal re-read
+        // that property over COM — so only assign what actually moved.
+        // State-dependent parts (tags, icon, commands) are rebuilt because
+        // the caller only gets here when the entity changed.
+        if (!string.Equals(target.Title, source.Title, StringComparison.Ordinal))
+        {
+            target.Title = source.Title;
+        }
+        if (!string.Equals(target.Subtitle, source.Subtitle, StringComparison.Ordinal))
+        {
+            target.Subtitle = source.Subtitle;
+        }
         target.Icon = source.Icon;
         target.Tags = source.Tags;
-        target.Details = source.Details;
+        // Hand over the deferred build rather than the built pane —
+        // reading source.Details here would fetch history / snapshots for
+        // a row nobody has selected.
+        target.ResetDetails(source.Factory);
         target.MoreCommands = source.MoreCommands;
         target.Command = source.Command;
     }

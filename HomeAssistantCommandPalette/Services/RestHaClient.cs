@@ -58,7 +58,14 @@ public sealed partial class RestHaClient : IHaClient
     // page renders cheap; if the picture is updated in HA it'll surface on
     // the next CmdPal restart.
     private static readonly TimeSpan EntityPictureTtl = TimeSpan.FromMinutes(15);
-    private static readonly TimeSpan HistoryTtl = TimeSpan.FromSeconds(60);
+    // History backs a 24-hour trend sparkline, so minutes of staleness are
+    // invisible in the rendered row.
+    private static readonly TimeSpan HistoryTtl = TimeSpan.FromMinutes(5);
+    // A failed fetch (recorder disabled, entity excluded from it, network
+    // blip) used to be retried on every render of every page the entity
+    // appears on. Remember the failure briefly so a broken endpoint costs
+    // one request a minute instead of one per render.
+    private static readonly TimeSpan HistoryFailureTtl = TimeSpan.FromSeconds(60);
     private const string ServicesCacheKey = "services";
     // Service registry rarely changes — cache for 5 minutes so the script
     // form page doesn't re-fetch on every open.
@@ -435,7 +442,7 @@ public sealed partial class RestHaClient : IHaClient
             var timestamp = sinceUtc.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture);
             var url = $"{_settings.Url}/api/history/period/{Uri.EscapeDataString(timestamp)}?filter_entity_id={Uri.EscapeDataString(entityId)}";
             var response = client.GetAsync(url, cts.Token).GetAwaiter().GetResult();
-            if (!response.IsSuccessStatusCode) return Array.Empty<HaHistoryPoint>();
+            if (!response.IsSuccessStatusCode) return CacheHistoryFailure(cacheKey);
 
             var json = response.Content.ReadAsStringAsync(cts.Token).GetAwaiter().GetResult();
             var points = ParseHistory(json);
@@ -444,8 +451,15 @@ public sealed partial class RestHaClient : IHaClient
         }
         catch
         {
-            return Array.Empty<HaHistoryPoint>();
+            return CacheHistoryFailure(cacheKey);
         }
+    }
+
+    private IReadOnlyList<HaHistoryPoint> CacheHistoryFailure(string cacheKey)
+    {
+        IReadOnlyList<HaHistoryPoint> empty = Array.Empty<HaHistoryPoint>();
+        _cache.Set(cacheKey, empty, HistoryFailureTtl);
+        return empty;
     }
 
     internal static IReadOnlyList<HaHistoryPoint> ParseHistory(string json)
