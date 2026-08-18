@@ -8,6 +8,35 @@ Home Assistant entities from CmdPal.
 > Inspired by the [Raycast Home Assistant extension](https://github.com/raycast/extensions/tree/main/extensions/homeassistant)
 > by tonka3000.
 
+## Installation
+
+### Microsoft Store
+
+[![Get from Microsoft Store](https://img.shields.io/badge/Microsoft%20Store-Get-blue?logo=microsoft-store)](https://apps.microsoft.com/detail/9PLX81TTCZ6H)
+
+Open the listing: <https://apps.microsoft.com/detail/9PLX81TTCZ6H>
+
+### WinGet (Microsoft Store source)
+
+```powershell
+winget install --source msstore 9PLX81TTCZ6H
+```
+
+### Sideload the signed MSIX
+
+Download the `.msixbundle` from the
+[latest release](https://github.com/nickknissen/HomeAssistantCommandPalette/releases/latest),
+then:
+
+```powershell
+Add-AppxPackage .\HomeAssistantCommandPalette_1.1.0.0.msixbundle
+```
+
+### Build from source
+
+See [docs/releasing.md](docs/releasing.md) for the packaging flow, or
+`scripts/dev-deploy.ps1` for a local build-sign-install loop.
+
 ## Setup
 
 1. In Home Assistant, go to **Profile → Security → Long-Lived Access Tokens**
